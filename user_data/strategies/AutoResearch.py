@@ -37,12 +37,16 @@ class AutoResearch(IStrategy):
 
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         dataframe["rsi"] = ta.RSI(dataframe, timeperiod=14)
+        bb = ta.BBANDS(dataframe, timeperiod=20, nbdevup=2.5, nbdevdn=2.5)
+        dataframe["bb_lower"] = bb["lowerband"]
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         prev_rsi = dataframe["rsi"].shift(1)
         dataframe.loc[
-            (prev_rsi < 20) & (dataframe["rsi"] > prev_rsi),
+            (prev_rsi < 20)
+            & (dataframe["rsi"] > prev_rsi)
+            & (dataframe["close"].shift(1) < dataframe["bb_lower"].shift(1)),
             "enter_long",
         ] = 1
         return dataframe
