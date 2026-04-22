@@ -38,9 +38,10 @@ class AutoResearch(IStrategy):
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         dataframe["rsi"] = ta.RSI(dataframe, timeperiod=14)
         dataframe["ema200"] = ta.EMA(dataframe, timeperiod=200)
-        dataframe["bb_upper"], dataframe["bb_middle"], dataframe["bb_lower"] = ta.BBANDS(
-            dataframe, timeperiod=20, nbdevup=2.0, nbdevdn=2.0
-        )
+        bands = ta.BBANDS(dataframe, timeperiod=20, nbdevup=2.0, nbdevdn=2.0)
+        dataframe["bb_upper"] = bands["upperband"]
+        dataframe["bb_middle"] = bands["middleband"]
+        dataframe["bb_lower"] = bands["lowerband"]
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
