@@ -1,14 +1,5 @@
 """
 AutoResearch — the single file the agent iterates on.
-
-Baseline: plain RSI mean-reversion.
-  - Enter long when RSI(14) < 30
-  - Exit long when RSI(14) > 70
-  - Hard stoploss at -10%, ROI table exits at any profit above 1%
-
-The agent is free to change ANYTHING in this file — indicators, logic, attributes,
-imports — as long as the class still exposes an IStrategy-compatible surface that
-FreqTrade's Backtesting can load and run.
 """
 
 from pandas import DataFrame
@@ -23,7 +14,7 @@ class AutoResearch(IStrategy):
     timeframe = "1h"
     can_short = False
 
-    minimal_roi = {"0": 0.01}
+    minimal_roi = {"0": 0.010}
     stoploss = -0.08
 
     trailing_stop = False
@@ -37,6 +28,8 @@ class AutoResearch(IStrategy):
 
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         dataframe["rsi"] = ta.RSI(dataframe, timeperiod=14)
+        dataframe["ema20"] = ta.EMA(dataframe, timeperiod=20)
+        dataframe["ema50"] = ta.EMA(dataframe, timeperiod=50)
         dataframe["ema200"] = ta.EMA(dataframe, timeperiod=200)
         bands = ta.BBANDS(dataframe, timeperiod=20, nbdevup=2.0, nbdevdn=2.0)
         dataframe["bb_upper"] = bands["upperband"]
@@ -46,16 +39,14 @@ class AutoResearch(IStrategy):
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         dataframe.loc[
-            (dataframe["close"] > dataframe["ema200"])
-            & (dataframe["rsi"] < 40)
-            & (dataframe["close"] < dataframe["bb_lower"]),
+            ((dataframe["close"] > dataframe["ema200"])) & ((dataframe["rsi"] < 40)),
             "enter_long",
         ] = 1
         return dataframe
 
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         dataframe.loc[
-            (dataframe["rsi"] > 65) | (dataframe["close"] > dataframe["bb_middle"]),
+            ((dataframe["rsi"] > 65) | (dataframe["close"] > dataframe["bb_middle"])),
             "exit_long",
         ] = 1
         return dataframe
