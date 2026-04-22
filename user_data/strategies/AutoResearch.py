@@ -18,6 +18,9 @@ class AutoResearch(IStrategy):
     stoploss = -0.08
 
     trailing_stop = False
+    trailing_stop_positive = 0.000
+    trailing_stop_positive_offset = 0.000
+    trailing_only_offset_is_reached = False
     process_only_new_candles = True
 
     use_exit_signal = True
@@ -38,15 +41,14 @@ class AutoResearch(IStrategy):
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        dataframe.loc[
-            ((dataframe["close"] > dataframe["ema200"])) & ((dataframe["rsi"] < 40)) & ((dataframe["close"] < dataframe["bb_lower"])),
-            "enter_long",
-        ] = 1
+        condition = (dataframe["close"] > dataframe["ema200"])
+        condition &= dataframe["rsi"] < 40
+        condition &= (dataframe["close"] < dataframe["bb_lower"] * 1.000)
+
+        dataframe.loc[condition, "enter_long"] = 1
         return dataframe
 
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        dataframe.loc[
-            ((dataframe["rsi"] > 65) | (dataframe["close"] > dataframe["bb_middle"])),
-            "exit_long",
-        ] = 1
+        exit_condition = ((dataframe["rsi"] > 60) & (dataframe["close"] > dataframe["bb_middle"]))
+        dataframe.loc[exit_condition, "exit_long"] = 1
         return dataframe
