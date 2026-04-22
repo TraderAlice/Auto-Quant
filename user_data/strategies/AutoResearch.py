@@ -40,7 +40,11 @@ class AutoResearch(IStrategy):
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        dataframe.loc[dataframe["rsi"] < 20, "enter_long"] = 1
+        prev_rsi = dataframe["rsi"].shift(1)
+        dataframe.loc[
+            (prev_rsi < 20) & (dataframe["rsi"] > prev_rsi),
+            "enter_long",
+        ] = 1
         return dataframe
 
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
