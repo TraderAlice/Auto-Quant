@@ -30,7 +30,7 @@ class AutoResearch(IStrategy):
     process_only_new_candles = True
 
     use_exit_signal = True
-    exit_profit_only = False
+    exit_profit_only = True
     ignore_roi_if_entry_signal = False
 
     startup_candle_count: int = 30
@@ -49,5 +49,5 @@ class AutoResearch(IStrategy):
         return dataframe
 
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        dataframe.loc[dataframe["rsi"] > 75, "exit_long"] = 1
+        dataframe.loc[dataframe["rsi"] > 65, "exit_long"] = 1
         return dataframe
