@@ -1,5 +1,7 @@
 # results journal — untracked by design so experience survives `git reset`
 results.tsv
+# but DO track frozen snapshots under versions/
+!versions/**/results.tsv
 
 # run logs — every experiment writes run.log, never commit
 run.log

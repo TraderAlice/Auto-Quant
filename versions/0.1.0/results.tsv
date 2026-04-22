@@ -1,0 +1,100 @@
+commit	sharpe	max_dd	status	description
+ace1295	-0.3954	53.1	keep	baseline: RSI(14) <30 long / >70 exit, ROI 1%, stop -10%. 415 trades, 83.9% wr, profit_factor 0.82 — ROI/stop asymmetry (1:10) dominates: many tiny wins, occasional 10% losers. Kept as anchor.
+16cd6e8	-0.0352	51.8	keep	remove 1% ROI take-profit (set to 100). Sharpe -0.40->-0.04, pf 0.82->0.98, trades 415->254. Big improvement and simpler. DD still awful (-52%), next target.
+2c52ba6	-0.2205	36.2	discard	regime filter: long only if close>SMA(200). Trades 254->60, DD 52->36 but sharpe -0.04->-0.22, pf 0.98->0.58. Surviving trades are late-stage pullbacks in uptrends, not quality signals.
+1e7b9c9	-0.0625	54.4	discard	tighten stop -10->-5%. Trades 254->346, DD 52->54 (worse), sharpe -0.04->-0.06. -5% stop fires on 1h noise and converts recoverable trades into small losses.
+e15b135	-2.8878	89.8	discard	flip to momentum: enter RSI cross-up 50, exit cross-down. 3097 trades, 16.8% wr — RSI noisy around 50 so every micro-wiggle triggers. Need buffered thresholds.
+c7c1e6c	0.0292	32.1	keep	tighter entry RSI<25 (was <30). Sharpe -0.04->+0.03 (first positive), DD 52->32, pf 0.98->1.03, trades 254->170, profit -7.5%->+6%. All metrics better, same complexity.
+6e0e6aa	0.0404	30.7	keep	tighter exit RSI>65 (was >70). Sharpe +0.03->+0.04, DD 32->31, pf 1.025->1.033, wr 64.7->66.3. Uniform small improvement, no extra complexity.
+bae499f	0.0403	17.5	keep	tighter entry RSI<20 (was <25). Sharpe tied but DD 31->17, pf 1.03->1.07, calmar 0.44->0.73, trades 187->86. Fewer but much higher quality signals.
+6a33bd7	0.0174	19.4	discard	exit RSI>70 (was >65). Sharpe 0.04->0.02, pf 1.07->1.03, calmar 0.73->0.31. Mean-reversion signal fades past 65; letting winners run gives back gains.
+45361c1	0.0260	15.4	discard	exit RSI>60. Sharpe 0.04->0.03, pf 1.07->1.05. Exit too early before recovery matures. 65 is the sweet spot (bracketed 60 and 70).
+8ccb2aa	-0.0617	25.3	discard	RSI period 14->21. Only 28 trades in 3y, 50% wr, pf 0.76. Signal too smoothed — <20 rare.
+f3908ec	-0.3587	43.1	discard	RSI period 14->7. 426 trades, sharpe -0.36, pf 0.87. Too noisy, RSI(14) is sweet spot at these thresholds.
+c25e6a9	0.0265	17.5	discard	vol>20-SMA filter. Barely triggers (86->85 trades), sharpe 0.04->0.03, pf 1.07->1.05. Volume not a useful additional filter at RSI<20.
+2be6aa5	-1.4903	66.3	discard	replace RSI with BB (close<lower entry, close>middle exit). 1043 trades, sharpe -1.49, DD -66%. BB triggers too often on crypto 1h.
+f9aa992	0.0113	25.8	discard	widen stop -10->-15%. Sharpe 0.04->0.01, DD 17->26. The -10% stop was saving capital on deep losers — wider just absorbs more loss.
+cf5ae8d	-0.3166	42.0	discard	trailing stop 2%/offset 3%. Sharpe 0.04->-0.32, pf 1.07->0.55. Trail caps winners at ~1% while losers still go -10%. Asymmetric failure.
+c0ef562	-0.0837	1.8	discard	regime filter EMA20>EMA50 AND RSI<20. Only 3 trades — filters contradict (oversold and short-term uptrend rarely coincide).
+7ff1a80	0.0432	1.1	discard	RSI<20 + close>SMA200. Only 4 trades, sortino hit -100 fallback. Not interpretable.
+bf87a77	-0.8647	65.0	discard	replace RSI with Stochastic <20/>80. 851 trades, sharpe -0.86. Stoch too sensitive on 1h.
+781787d	-0.1031	26.8	discard	ROI 5% take-profit. Sharpe 0.04->-0.10, pf 1.07->0.84. Truncates the occasional 8-10% winners that were offsetting -10% stops.
+fe90100	0.0513	20.9	keep	entry: prev RSI<20 AND RSI turning up (no knife catching). Sharpe 0.040->0.051, pf 1.07->1.10, wr 64->67.5%. DD slightly up (17->21). Real signal.
+206d056	0.0413	20.2	discard	exit: prev RSI>65 AND turning down. Sharpe 0.051->0.041, pf 1.10->1.08. Waiting for turn-down gives back the move; mean-reversion tops are sharp.
+b1259f3	-0.6063	49.3	discard	replace RSI with MFI. 451 trades (vs 83), sharpe -0.61. MFI<20 much more common — noisier signal.
+cbd832a	0.0507	22.0	discard	2-bar turn confirm. Sharpe tied (0.051) but trades halved 83->46 — higher variance on same signal. Simpler version wins.
+f83052f	0.0513	20.9	discard	add close>open to entry. Exactly identical metrics (83 trades) — "rsi turning up" already implies close>previous-close on 1h. Redundant filter.
+1df22f4	-0.1754	29.1	discard	exit RSI>55. Sharpe -0.18, pf 0.70. Far too early — wins get cut. Exit curve: 55 bad, 60 ok, 65 best, 70 worse.
+23fb34c	-0.0376	28.0	discard	entry prev RSI<22 (vs <20). 120 trades (+37), sharpe 0.051->-0.04, pf 1.10->0.95. 20-22 region is low-quality noise.
+cf5013d	-0.0456	19.0	discard	entry prev RSI<18. 55 trades, sharpe -0.05, pf 0.88. RSI<20 bracketed by 18 (too tight) and 22 (too loose) — stable optimum.
+e9a8b6d	0.2457	7.0	keep	disable stoploss (-99%). Sharpe 0.05->0.25 (5x), DD 21->7, pf 1.10->1.61, profit +8->+26%. Stops were cutting recoverable trades. Avg loser 5d, max 13d — they all eventually reach RSI>65.
+5f03916	0.2746	7.3	keep	exit RSI>70 (no-stop regime). Sharpe 0.25->0.27, pf 1.61->1.74, profit +26->+32%. With no premature stops, wider exit lets winners mature.
+6292795	0.4828	6.2	keep	exit RSI>75. Sharpe 0.27->0.48, pf 1.74->3.10, profit +32->+99%, DD 7.3->6.2. Mean-reversion in BTC/ETH runs further than classical 70 threshold.
+3194fe6	0.2037	11.9	discard	exit RSI>80. Sharpe 0.48->0.20, DD 6.2->11.9. Too rare — trades linger through subsequent dips. 75 is the peak.
+d3457a9	0.3910	8.3	discard	re-test prev RSI<22 (no-stop regime). Still worse: 0.48->0.39, pf 3.10->1.93. RSI<20 stable optimum across stop/no-stop.
+76dd4da	0.2355	8.5	discard	entry prev RSI<17. Only 37 trades, sharpe 0.48->0.24.
+fb5fe43	0.4411	5.3	discard	exit RSI>73. Sharpe 0.48->0.44, pf 3.10->2.60. DD marginally better but sharpe/pf down.
+5657d78	0.4573	6.2	discard	drop turning-up filter (pure RSI<20). Sharpe 0.48->0.46, pf 3.10->2.92. Turn filter adds real edge even no-stop.
+8fb3d7f	0.0597	26.1	discard	RSI(10). 144 trades, sharpe 0.06. Too noisy. RSI(14) optimal.
+3bb7165	0.0550	0.1	discard	SMA200 filter re-test. Only 3 trades. RSI<20 and close>SMA200 inherently conflict.
+c111e7e	0.5252	3.6	keep	add prev close < BB lower (2.5sigma) to entry. Sharpe 0.48->0.53, pf 3.10->6.38, DD 6.2->3.6, wr 69->76. Trades 65->41 (1/mo) but each is higher quality.
+7d45e47	0.5402	3.7	keep	drop RSI turn-up filter, use RSI<20 AND close<BB_lower. Sharpe 0.53->0.54, profit +98->+116%, DD same. Simpler + better.
+3695c45	0.4434	6.2	discard	BB sigma 2.5->2.0. Sharpe 0.54->0.44, pf 4.70->2.88. 2.0 fires too often.
+d950bcf	0.2704	4.6	discard	BB sigma 2.5->3.0. 34 trades, sharpe 0.54->0.27. Too rare. 2.5 optimal.
+6df7e68	0.2317	7.0	discard	exit close>BB_upper. Sharpe 0.54->0.23, profit 116%->28%. BB upper at 2.5sigma too rare for exit. RSI>75 better.
+3cd929c	0.4733	9.0	discard	RSI<25 + BB_lower. 103 trades (2x), sharpe 0.54->0.47, pf 4.70->1.97. Loosening RSI dilutes quality.
+83db165	0.2903	30.8	discard	only close<BB_lower (drop RSI). 191 trades, DD 30.8, sharpe 0.54->0.29. RSI<20 is the essential filter.
+683cb20	0.4661	6.5	discard	exit RSI>77. Sharpe 0.54->0.47, DD 3.7->6.5. 75 is the sweet spot.
+90c7e74	0.3119	4.3	discard	BB period 20->10. 32 trades, sharpe 0.54->0.31. Faster BB = too few signals.
+47b28c1	0.4950	6.2	discard	BB period 30. Sharpe 0.54->0.50, pf 4.70->3.36, DD 3.7->6.2.
+87d0d3c	0.0105	3.0	discard	add green-bar filter. Only 5 trades — conflicts with downward-driven entry conditions.
+3ff03d0	0.3560	6.2	discard	shifted BB (prev bar broke). Sharpe 0.54->0.36. Same-bar BB+RSI is better.
+9f88124	0.6353	3.3	keep	BB sigma 2.5->2.25. Sharpe 0.54->0.64, pf 4.70->5.09, DD 3.7->3.3, profit +116->+145. All metrics better.
+3b5e160	0.5365	6.2	discard	BB sigma 2.15. Sharpe 0.64->0.54, DD 3.3->6.2. 2.25 is peak.
+7505799	0.3731	9.9	discard	RSI<22 + BB 2.25. Sharpe 0.64->0.37. Firm RSI<20.
+3aa114b	0.4960	4.4	discard	exit RSI>73 retest. Sharpe 0.64->0.50. 75 stable.
+d2ef551	0.1569	5.4	discard	ADX<30 filter. 22 trades, sharpe 0.16. Strong-trend flushes (ADX>30) are the profitable trades — bigger snap-back.
+b49be23	0.5489	2.7	discard	ADX>=30 filter. Sharpe 0.64->0.55, profit 145->120%. pf and DD better but dropped some fast high-return winners.
+2085bac	-0.0785	17.8	discard	compound exit RSI>75 OR MACD_hist<0 crossdown. MACD crossdowns fire right after entry — wr 70->43%.
+b9af9d0	0.4668	6.2	discard	BB period 25. Sharpe 0.64->0.47. BB(20) stable.
+57cba57	0.5722	3.3	discard	BB sigma 2.35. Sharpe 0.64->0.57. 2.25 peak.
+1d32f1a	0.6353	3.3	discard	OR extreme RSI<15 path. Identical metrics — RSI<15 already satisfies primary. Redundant.
+e85fe81	0.1278	34.5	discard	RSI(10)<25+BB. 205 trades, sharpe 0.13, DD 34.5. RSI(14) remains right.
+e0492c4	1.1261	0.0	keep	exit_profit_only=True + RSI>65. Sharpe 0.64->1.13, 100% wr, DD~0, profit +145->+107. Trades hold until profitable (max 67d). Regime-risk: 2023-25 data always recovers.
+5a3789d	0.8669	0.0	discard	RSI>60 + profit_only. Sharpe 1.13->0.87. Earlier exit = smaller per-trade profit.
+dae7644	1.0612	0.0	discard	RSI>70 + profit_only. Sharpe 1.13->1.06, profit 107->129%. Longer holds block re-entries (57 trades vs 60). Sharpe-optimal is RSI>65.
+f4c8910	0.8190	0.0	discard	RSI>50 + profit_only. Sharpe 1.13->0.82, profit 107->53%. Tiny per-trade wins.
+6b0c746	0.3640	11.6	discard	RSI<22 + profit_only setup. Breaks 100% wr (98.5%, one loser), DD 0->11.6, sharpe 1.13->0.36.
+dc8cf7c	0.7517	0.0	discard	RSI<18+profit_only. 44 trades, sharpe 0.75, profit +52%. RSI<20 stable.
+b095850	1.1232	0.0	discard	BB 2.30+profit_only. Essentially tied (sharpe 1.123 vs 1.126), slightly less profit.
+3677c88	1.1248	0.0	discard	BB 2.20+profit_only. Tied (sharpe 1.125 vs 1.126).
+81ddcd5	0.4098	31.4	discard	CCI<-100 + BB. 164 trades, DD 31, sharpe 1.13->0.41. CCI fires too often.
+383948b	0.3763	31.4	discard	CCI<-200 + BB. 153 trades, DD 31, sharpe 0.38. RSI beats CCI at 1h.
+7b8b450	0.8005	0.0	discard	RSI>75+profit_only. 40 trades (capital locked). Sharpe 1.13->0.80. 65 sweet spot for profit_only mode.
+ba4433e	1.1694	0.0	keep	drop BB, just RSI<20 entry. Sharpe 1.13->1.17, 60->65 trades, profit 107->92%. BB was filtering 5 eventually-profitable trades. Simpler + better.
+3e632ca	1.1694	0.0	keep	cleanup: remove unused BB code. Identical metrics, tidier file.
+41262f5	1.1458	0.0	discard	re-add turn-up filter. Sharpe 1.17->1.15, profit 92->85%. Simpler RSI<20 better.
+70414cd	1.2171	0.0	keep	entry RSI<21. Sharpe 1.17->1.22, 65->69 trades. Slight loosening helps in profit_only regime.
+c93fd9d	0.3693	11.6	discard	RSI<22. Cliff — 1 loser breaks 100% wr, sharpe 1.22->0.37. 21 is the edge.
+908ea7e	1.4358	0.0	keep	exit RSI>62. Sharpe 1.22->1.44, trades 69->80, profit 91->86%. Faster cycles in profit_only regime.
+b125486	1.3654	0.0	discard	exit RSI>58. Sharpe 1.44->1.37. Peak at 62.
+0ac6e55	1.4137	0.0	discard	exit RSI>60. Sharpe 1.44->1.41. 62 slightly better.
+70771f2	1.2061	0.0	discard	exit RSI>63. Sharpe 1.44->1.21. 62 stable.
+dd61409	1.2197	0.0	discard	RSI<20 + RSI>62. Sharpe 1.44->1.22. 21 pairs well with 62.
+d5df0f7	0.4873	30.5	discard	OR entry RSI<21 OR BB_lower. 196 trades, DD 30, sharpe 0.49. OR too permissive.
+f489817	1.3784	0.0	discard	RSI<21 + low<low.shift(1). Sharpe 1.44->1.38. New-low filter adds complexity for small cost.
+4df4e3b	0.4061	30.6	discard	Williams %R<-90/>-30. 258 trades, DD 30, sharpe 0.41. Too noisy.
+8b0108f	1.4358	0.0	discard	stoploss -0.50. Identical metrics (no trade reaches 50% loss). -0.99 kept for "no stop" clarity.
+74423c4	4.6690	0.0	discard	add 1% ROI take-profit. Sharpe 1.44->4.67 BUT profit 86->49. Retroactively discarded — ROI clipping games sharpe by making wins uniform-tiny, sacrificing real return. Common-sense gate.
+3f7e255	12.3874	0.0	discard	ROI 0.5%. Retroactively discarded — pushes gaming further (profit 32, sharpe 12.4). Real research output is the sharpe-1.44/86% line.
+81cbd11	18.2951	0.0	discard	ROI 0.3%. Profit drops to 22%. Sharpe inversely correlated with profit = classic gaming signature, all these ROI-clip experiments rolled back.
+9ff5eed	1.0142	0.0	discard	smoothed entry rsi.rolling(3).mean()<21. Trades 80->55, sharpe 1.44->1.01. Smoothing kills too many entries.
+99fc046	0.2913	29.3	discard	RSI<30. Too loose, DD 29.
+0bfa126	0.7218	0.0	discard	entry 2-consecutive RSI<21. 54 trades, sharpe 1.44->0.72.
+e560069	0.4917	12.4	discard	stoploss -25% tail-risk. Breaks 100% wr — at least 1 trade went >-25% before recovery. Need "no stop" for the regime.
+110f407	0.5511	0.0	discard	RSI<21 + close>open. 39 trades (half), sharpe 1.44->0.55. Green-bar too restrictive.
+4397aee	1.1797	0.0	discard	exit RSI>64. Sharpe 1.44->1.18. 62 is narrow peak, sensitive.
+91f8b3a	1.4045	0.0	discard	exit RSI>61. Sharpe 1.40 vs 1.44. Close but 62 slightly wins.
+adf8538	1.4358	0.0	discard	exit RSI>62 AND rising. Identical — rising filter redundant at first crossing. Extra complexity.
+fc0ee84	0.1857	11.2	discard	disable exit_profit_only (sanity check). Sharpe 1.44->0.19, profit 86->19%. profit_only contributes most of the lift; underlying RSI signal modest edge (pf 1.34).
+1dc4242	0.1985	21.7	discard	RSI(12). 2 losers break 100% wr, DD 22, sharpe 0.20. RSI(14) remains correct.
