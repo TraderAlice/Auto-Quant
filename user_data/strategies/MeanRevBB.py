@@ -24,9 +24,10 @@ class MeanRevBB(IStrategy):
     can_short = False
 
     minimal_roi = {"0": 100}
-    # 5% hard stop: if close falls this far below entry, the bounce hypothesis
-    # is broken — 2023-25 bull pullbacks went well past 5% on both pairs.
-    stoploss = -0.05
+    # No hard stop. v0.1.0 aha#1 + round-3 here both confirmed: at 1h on
+    # BTC/ETH, stops cut recoverable bounces. Regime filter (close>EMA200)
+    # already bounds downside exposure.
+    stoploss = -0.99
 
     trailing_stop = False
     process_only_new_candles = True
@@ -56,5 +57,8 @@ class MeanRevBB(IStrategy):
         return dataframe
 
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        dataframe.loc[dataframe["close"] >= dataframe["bb_middle"], "exit_long"] = 1
+        # Exit at upper band, not middle. Round-3 analysis: wr 66% with pf<1
+        # means winners too small. Extending exit target trades wr for bigger
+        # winners; regime filter keeps us in a context where overshoot is plausible.
+        dataframe.loc[dataframe["close"] >= dataframe["bb_upper"], "exit_long"] = 1
         return dataframe

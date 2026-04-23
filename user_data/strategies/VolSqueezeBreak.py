@@ -58,5 +58,9 @@ class VolSqueezeBreak(IStrategy):
         return dataframe
 
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        dataframe.loc[dataframe["close"] < dataframe["bb_middle"], "exit_long"] = 1
+        # Patient exit: only bail when vol expansion fully reverses (close back
+        # below lower BB). Round-3 hypothesis: winners too small because we
+        # exit at middle on normal retrace; let them run until vol contracts
+        # against the breakout direction.
+        dataframe.loc[dataframe["close"] < dataframe["bb_lower"], "exit_long"] = 1
         return dataframe
