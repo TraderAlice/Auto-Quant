@@ -69,11 +69,8 @@ class MACDMomentum(IStrategy):
         return dataframe
 
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Exit on MACD cross below signal (momentum fading). Simpler than
-        # stack-break analog — MACD crossover is the symmetric reverse signal.
-        dataframe.loc[
-            (dataframe["macd"] < dataframe["macdsignal"])
-            & (dataframe["macd"].shift(1) >= dataframe["macdsignal"].shift(1)),
-            "exit_long",
-        ] = 1
+        # Patient exit: only bail when MACD drops below zero (momentum
+        # outright negative), not just on signal crossover. Symmetric to
+        # TrendEMA's "only exit on stack break, not pullback".
+        dataframe.loc[dataframe["macd"] < 0, "exit_long"] = 1
         return dataframe
