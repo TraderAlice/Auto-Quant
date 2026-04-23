@@ -55,16 +55,19 @@ class MeanRevBB(IStrategy):
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Confirmed reversal + regime + volume. ATR expansion (round 41)
-        # hurt — MR signals often come from low-vol exhaustion bars, and
-        # filtering for expanding ATR removes the best setups. ATR is
-        # paradigm-specific: helps trend/momentum, hurts mean-reversion.
-        prev_below_lower = dataframe["close"].shift(1) < dataframe["bb_lower"].shift(1)
+        # Stronger oversold confirmation: TWO prior bars below lower BB,
+        # then current bar closes back above. Stricter than 1-bar version.
+        prev2_below = dataframe["close"].shift(2) < dataframe["bb_lower"].shift(2)
+        prev1_below = dataframe["close"].shift(1) < dataframe["bb_lower"].shift(1)
         now_above_lower = dataframe["close"] > dataframe["bb_lower"]
         bull_regime = dataframe["close"] > dataframe["ema200"]
         vol_expansion = dataframe["volume"] > dataframe["vol_sma20"]
         dataframe.loc[
-            prev_below_lower & now_above_lower & bull_regime & vol_expansion,
+            prev2_below
+            & prev1_below
+            & now_above_lower
+            & bull_regime
+            & vol_expansion,
             "enter_long",
         ] = 1
         return dataframe
