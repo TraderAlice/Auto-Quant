@@ -55,19 +55,14 @@ class MeanRevBB(IStrategy):
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Stronger oversold confirmation: TWO prior bars below lower BB,
-        # then current bar closes back above. Stricter than 1-bar version.
-        prev2_below = dataframe["close"].shift(2) < dataframe["bb_lower"].shift(2)
-        prev1_below = dataframe["close"].shift(1) < dataframe["bb_lower"].shift(1)
+        # 1-bar confirmed reversal (prev below lower, now above). 2-bar
+        # (round 60) was too strict — 55 trades, Sharpe regressed.
+        prev_below_lower = dataframe["close"].shift(1) < dataframe["bb_lower"].shift(1)
         now_above_lower = dataframe["close"] > dataframe["bb_lower"]
         bull_regime = dataframe["close"] > dataframe["ema200"]
         vol_expansion = dataframe["volume"] > dataframe["vol_sma20"]
         dataframe.loc[
-            prev2_below
-            & prev1_below
-            & now_above_lower
-            & bull_regime
-            & vol_expansion,
+            prev_below_lower & now_above_lower & bull_regime & vol_expansion,
             "enter_long",
         ] = 1
         return dataframe
