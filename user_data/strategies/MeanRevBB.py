@@ -61,8 +61,8 @@ class MeanRevBB(IStrategy):
         prev_below_lower = dataframe["close"].shift(1) < dataframe["bb_lower"].shift(1)
         now_above_lower = dataframe["close"] > dataframe["bb_lower"]
         bull_regime = dataframe["close"] > dataframe["ema200"]
-        # Volume bracket: 1.0x (0.52), 1.5x (0.25). Bisect 1.25x.
-        vol_expansion = dataframe["volume"] > dataframe["vol_sma20"] * 1.25
+        # Volume bracket: 1.0x (0.52), 1.25x (0.32), 1.5x (0.25). 1.0x wins.
+        vol_expansion = dataframe["volume"] > dataframe["vol_sma20"]
         dataframe.loc[
             prev_below_lower & now_above_lower & bull_regime & vol_expansion,
             "enter_long",
