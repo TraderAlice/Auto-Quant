@@ -47,12 +47,14 @@ class MeanRevBB(IStrategy):
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Regime filter: only bounce-bounce in bullish regime to avoid catching
-        # knives during downtrends. Close below lower BB AND close above EMA200.
+        # Confirmed-reversal entry: prior bar closed below lower BB, current
+        # bar closed back above it. Waits for the actual turn rather than
+        # catching the knife mid-drop. Regime filter (close>EMA200) retained.
+        prev_below_lower = dataframe["close"].shift(1) < dataframe["bb_lower"].shift(1)
+        now_above_lower = dataframe["close"] > dataframe["bb_lower"]
+        bull_regime = dataframe["close"] > dataframe["ema200"]
         dataframe.loc[
-            (dataframe["close"] < dataframe["bb_lower"])
-            & (dataframe["close"] > dataframe["ema200"]),
-            "enter_long",
+            prev_below_lower & now_above_lower & bull_regime, "enter_long"
         ] = 1
         return dataframe
 

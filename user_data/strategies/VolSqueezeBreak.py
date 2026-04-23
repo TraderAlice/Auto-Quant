@@ -26,7 +26,13 @@ class VolSqueezeBreak(IStrategy):
     minimal_roi = {"0": 100}
     stoploss = -0.99
 
-    trailing_stop = False
+    # Trailing stop: once a trade gets +3% profit, lock in at +1%. Protects
+    # squeeze-break winners from full reversals. Round-6 analysis showed
+    # losing-trade DD is this strategy's weak spot.
+    trailing_stop = True
+    trailing_stop_positive = 0.01
+    trailing_stop_positive_offset = 0.03
+    trailing_only_offset_is_reached = True
     process_only_new_candles = True
 
     use_exit_signal = True
