@@ -34,17 +34,23 @@ class AutoResearch(IStrategy):
         dataframe["ema20"] = ta.EMA(dataframe, timeperiod=20)
         dataframe["ema50"] = ta.EMA(dataframe, timeperiod=50)
         dataframe["ema200"] = ta.EMA(dataframe, timeperiod=200)
+        dataframe["adx"] = ta.ADX(dataframe, timeperiod=14)
+        dataframe["mfi"] = ta.MFI(dataframe, timeperiod=14)
+        dataframe["cci"] = ta.CCI(dataframe, timeperiod=20)
+        dataframe["atr"] = ta.ATR(dataframe, timeperiod=14)
         bands = ta.BBANDS(dataframe, timeperiod=25, nbdevup=2.18, nbdevdn=2.18)
         dataframe["bb_upper"] = bands["upperband"]
         dataframe["bb_middle"] = bands["middleband"]
         dataframe["bb_lower"] = bands["lowerband"]
+        dataframe["bb_width"] = (dataframe["bb_upper"] - dataframe["bb_lower"]) / dataframe["bb_middle"]
+        dataframe["atr_pct"] = dataframe["atr"] / dataframe["close"]
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         condition = (dataframe["close"] > dataframe["ema200"])
         condition &= dataframe["rsi"] < 39
         condition &= (dataframe["close"] < dataframe["bb_lower"] * 0.997)
-
+        condition &= dataframe["adx"] > 20
         dataframe.loc[condition, "enter_long"] = 1
         return dataframe
 
