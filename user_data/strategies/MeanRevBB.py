@@ -48,15 +48,14 @@ class MeanRevBB(IStrategy):
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Confirmed reversal + regime + RSI<30 at prior bar (genuine oversold
-        # confluence with BB-lower print). Adds a second oversold voter.
+        # Confirmed-reversal entry: prior close<lower, now>lower, in bull regime
+        # (close>EMA200). RSI<30 confluence (round 21) over-filters. Weekday
+        # filter (round 17) not meaningful on BTC/ETH 1h.
         prev_below_lower = dataframe["close"].shift(1) < dataframe["bb_lower"].shift(1)
         now_above_lower = dataframe["close"] > dataframe["bb_lower"]
         bull_regime = dataframe["close"] > dataframe["ema200"]
-        rsi_oversold = dataframe["rsi"].shift(1) < 30
         dataframe.loc[
-            prev_below_lower & now_above_lower & bull_regime & rsi_oversold,
-            "enter_long",
+            prev_below_lower & now_above_lower & bull_regime, "enter_long"
         ] = 1
         return dataframe
 

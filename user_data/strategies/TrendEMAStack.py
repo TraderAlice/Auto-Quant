@@ -37,34 +37,33 @@ class TrendEMAStack(IStrategy):
     startup_candle_count: int = 210
 
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        dataframe["ema9"] = ta.EMA(dataframe, timeperiod=9)
-        dataframe["ema21"] = ta.EMA(dataframe, timeperiod=21)
-        dataframe["ema50"] = ta.EMA(dataframe, timeperiod=50)
+        # Faster EMA set (5/13/34). Testing whether shorter trend signals
+        # surface more opportunities on 1h crypto or introduce more whipsaws.
+        dataframe["ema_fast"] = ta.EMA(dataframe, timeperiod=5)
+        dataframe["ema_mid"] = ta.EMA(dataframe, timeperiod=13)
+        dataframe["ema_slow"] = ta.EMA(dataframe, timeperiod=34)
         dataframe["ema200"] = ta.EMA(dataframe, timeperiod=200)
         dataframe["atr"] = ta.ATR(dataframe, timeperiod=14)
         dataframe["atr_sma20"] = dataframe["atr"].rolling(20).mean()
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Entry layers: crossover event + slow-trend + macro regime + ATR
-        # expansion. Green-candle confirmation (round 18) hurt — crossover
-        # bars can close red intra-bar even on genuine signals.
-        ema9_cross_up_21 = (dataframe["ema9"] > dataframe["ema21"]) & (
-            dataframe["ema9"].shift(1) <= dataframe["ema21"].shift(1)
+        fast_cross_up_mid = (
+            dataframe["ema_fast"] > dataframe["ema_mid"]
+        ) & (
+            dataframe["ema_fast"].shift(1) <= dataframe["ema_mid"].shift(1)
         )
-        slow_trend_up = dataframe["ema21"] > dataframe["ema50"]
+        slow_trend_up = dataframe["ema_mid"] > dataframe["ema_slow"]
         bull_regime = dataframe["close"] > dataframe["ema200"]
         atr_expanding = dataframe["atr"] > dataframe["atr_sma20"]
         dataframe.loc[
-            ema9_cross_up_21 & slow_trend_up & bull_regime & atr_expanding,
+            fast_cross_up_mid & slow_trend_up & bull_regime & atr_expanding,
             "enter_long",
         ] = 1
         return dataframe
 
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Patient exit: only primary stack break (ema9<ema21). Chandelier
-        # exit (round 19) cut winners without improving DD.
         dataframe.loc[
-            dataframe["ema9"] < dataframe["ema21"], "exit_long"
+            dataframe["ema_fast"] < dataframe["ema_mid"], "exit_long"
         ] = 1
         return dataframe
