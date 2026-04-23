@@ -52,17 +52,22 @@ class MACDMomentum(IStrategy):
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Entry: MACD cross up + MACD>0 + bull regime + ATR expanding.
-        # ATR filter (same pattern that worked for TrendEMA) trades off
-        # trade count for quality — addresses round-27 fee-drag concern.
+        # Entry: MACD cross up + MACD>0 + bull regime + ATR expanding +
+        # histogram accelerating (macdhist > prior macdhist). Confirms
+        # momentum is building, not just catching a single-bar blip.
         macd_cross_up = (dataframe["macd"] > dataframe["macdsignal"]) & (
             dataframe["macd"].shift(1) <= dataframe["macdsignal"].shift(1)
         )
         positive_macd = dataframe["macd"] > 0
         bull_regime = dataframe["close"] > dataframe["ema200"]
         atr_expanding = dataframe["atr"] > dataframe["atr_sma20"]
+        hist_accelerating = dataframe["macdhist"] > dataframe["macdhist"].shift(1)
         dataframe.loc[
-            macd_cross_up & positive_macd & bull_regime & atr_expanding,
+            macd_cross_up
+            & positive_macd
+            & bull_regime
+            & atr_expanding
+            & hist_accelerating,
             "enter_long",
         ] = 1
         return dataframe
