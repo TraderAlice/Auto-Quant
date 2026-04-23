@@ -47,17 +47,20 @@ class MeanRevBB(IStrategy):
         dataframe["bb_upper"] = bb["upperband"]
         dataframe["ema200"] = ta.EMA(dataframe, timeperiod=200)
         dataframe["rsi"] = ta.RSI(dataframe, timeperiod=14)
+        dataframe["vol_sma20"] = dataframe["volume"].rolling(20).mean()
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Confirmed-reversal entry: prior close<lower, now>lower, in bull regime
-        # (close>EMA200). RSI<30 confluence (round 21) over-filters. Weekday
-        # filter (round 17) not meaningful on BTC/ETH 1h.
+        # Confirmed-reversal + regime + volume expansion. Volume filter
+        # tested round 11 with BB period 20 — hurt then. Retrying at
+        # BB period 15 baseline (different signal density).
         prev_below_lower = dataframe["close"].shift(1) < dataframe["bb_lower"].shift(1)
         now_above_lower = dataframe["close"] > dataframe["bb_lower"]
         bull_regime = dataframe["close"] > dataframe["ema200"]
+        vol_expansion = dataframe["volume"] > dataframe["vol_sma20"]
         dataframe.loc[
-            prev_below_lower & now_above_lower & bull_regime, "enter_long"
+            prev_below_lower & now_above_lower & bull_regime & vol_expansion,
+            "enter_long",
         ] = 1
         return dataframe
 
