@@ -62,15 +62,12 @@ class TrendEMAStack(IStrategy):
         bull_regime = dataframe["close"] > dataframe["ema200"]
         atr_expanding = dataframe["atr"] > dataframe["atr_sma20"]
         vol_expansion = dataframe["volume"] > dataframe["vol_sma20"]
-        # RSI<75 applied from MACDMomentum round-73 win.
-        not_overbought = dataframe["rsi"] < 75
         dataframe.loc[
             ema9_cross_up_21
             & slow_trend_up
             & bull_regime
             & atr_expanding
-            & vol_expansion
-            & not_overbought,
+            & vol_expansion,
             "enter_long",
         ] = 1
         return dataframe
