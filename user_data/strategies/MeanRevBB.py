@@ -61,12 +61,13 @@ class MeanRevBB(IStrategy):
         return dataframe
 
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Exit only when BOTH price hits upper band AND RSI>70 — wait for
-        # genuine overbought confirmation. Stops exiting on a mere upper-band
-        # tag in a strong move that still has legs.
-        dataframe.loc[
-            (dataframe["close"] >= dataframe["bb_upper"])
-            & (dataframe["rsi"] > 70),
-            "exit_long",
-        ] = 1
+        # Two exits: (a) take-profit when upper BB tag coincides with RSI>70
+        # overbought, (b) regime-break bailout when close falls below EMA200
+        # — the same regime filter that gated entry. Addresses -38% DD by
+        # capping exposure to bull→bear transitions mid-trade.
+        take_profit = (dataframe["close"] >= dataframe["bb_upper"]) & (
+            dataframe["rsi"] > 70
+        )
+        regime_break = dataframe["close"] < dataframe["ema200"]
+        dataframe.loc[take_profit | regime_break, "exit_long"] = 1
         return dataframe
