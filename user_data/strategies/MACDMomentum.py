@@ -69,8 +69,12 @@ class MACDMomentum(IStrategy):
         return dataframe
 
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Patient exit: only bail when MACD drops below zero (momentum
-        # outright negative), not just on signal crossover. Symmetric to
-        # TrendEMA's "only exit on stack break, not pullback".
-        dataframe.loc[dataframe["macd"] < 0, "exit_long"] = 1
+        # Exit on MACD cross below signal (momentum fading). Patient exit
+        # (macd<0, round 35) traded Sharpe for profit; cross-down is the
+        # optimum for Sharpe.
+        dataframe.loc[
+            (dataframe["macd"] < dataframe["macdsignal"])
+            & (dataframe["macd"].shift(1) >= dataframe["macdsignal"].shift(1)),
+            "exit_long",
+        ] = 1
         return dataframe
