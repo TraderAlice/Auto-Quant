@@ -42,9 +42,9 @@ class MACDMomentum(IStrategy):
     startup_candle_count: int = 210
 
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Faster MACD (8/17/9) — tests whether 1h crypto rewards earlier
-        # signals. Standard 12/26/9 was the baseline.
-        macd = ta.MACD(dataframe, fastperiod=8, slowperiod=17, signalperiod=9)
+        # Slower MACD (19/39/9) — round 30 faster 8/17/9 was noisier.
+        # Testing the opposite direction from the 12/26/9 baseline.
+        macd = ta.MACD(dataframe, fastperiod=19, slowperiod=39, signalperiod=9)
         dataframe["macd"] = macd["macd"]
         dataframe["macdsignal"] = macd["macdsignal"]
         dataframe["macdhist"] = macd["macdhist"]
