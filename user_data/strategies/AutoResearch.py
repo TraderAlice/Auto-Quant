@@ -34,7 +34,7 @@ class AutoResearch(IStrategy):
         dataframe["ema20"] = ta.EMA(dataframe, timeperiod=20)
         dataframe["ema50"] = ta.EMA(dataframe, timeperiod=50)
         dataframe["ema200"] = ta.EMA(dataframe, timeperiod=200)
-        bands = ta.BBANDS(dataframe, timeperiod=24, nbdevup=2.2, nbdevdn=2.2)
+        bands = ta.BBANDS(dataframe, timeperiod=24, nbdevup=2.3, nbdevdn=2.3)
         dataframe["bb_upper"] = bands["upperband"]
         dataframe["bb_middle"] = bands["middleband"]
         dataframe["bb_lower"] = bands["lowerband"]
@@ -49,6 +49,6 @@ class AutoResearch(IStrategy):
         return dataframe
 
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        exit_condition = ((dataframe["rsi"] > 60) & (dataframe["close"] > dataframe["bb_middle"]))
+        exit_condition = ((dataframe["rsi"] > 60) & (dataframe["close"] > dataframe["bb_middle"] * 1.000))
         dataframe.loc[exit_condition, "exit_long"] = 1
         return dataframe
