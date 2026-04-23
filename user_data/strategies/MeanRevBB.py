@@ -24,10 +24,10 @@ class MeanRevBB(IStrategy):
     can_short = False
 
     minimal_roi = {"0": 100}
-    # No hard stop. v0.1.0 aha#1 + round-3 here both confirmed: at 1h on
-    # BTC/ETH, stops cut recoverable bounces. Regime filter (close>EMA200)
-    # already bounds downside exposure.
-    stoploss = -0.99
+    # -15% tail stop: not a trading stop (v0.1.0 + round-3 proved tight stops
+    # cut recoverable bounces), but catastrophe insurance. Only engages on
+    # the worst 2023-25 drawdowns that pushed past typical MR recovery range.
+    stoploss = -0.15
 
     trailing_stop = False
     process_only_new_candles = True

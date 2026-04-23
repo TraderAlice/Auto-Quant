@@ -48,17 +48,21 @@ class VolSqueezeBreak(IStrategy):
         )
         dataframe["squeezed"] = dataframe["bb_width"] <= dataframe["bb_width_q10"]
         dataframe["vol_sma20"] = dataframe["volume"].rolling(20).mean()
+        dataframe["atr"] = ta.ATR(dataframe, timeperiod=14)
+        dataframe["atr_sma20"] = dataframe["atr"].rolling(20).mean()
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Stricter breakout: require close > upper by 0.5% of price (not just
-        # touch). Filters borderline breaks that mean-revert immediately.
-        # Volume expansion filter retained.
+        # Squeeze + strong break + volume expansion + ATR expansion.
+        # ATR filter is a vol-regime shift: a real squeeze-break should coincide
+        # with expanding true-range, not just a one-bar spike on flat vol.
         prior_squeezed = dataframe["squeezed"].shift(1).fillna(False).astype(bool)
         vol_expansion = dataframe["volume"] > dataframe["vol_sma20"]
         strong_break = dataframe["close"] > dataframe["bb_upper"] * 1.005
+        atr_expanding = dataframe["atr"] > dataframe["atr_sma20"]
         dataframe.loc[
-            prior_squeezed & strong_break & vol_expansion, "enter_long"
+            prior_squeezed & strong_break & vol_expansion & atr_expanding,
+            "enter_long",
         ] = 1
         return dataframe
 

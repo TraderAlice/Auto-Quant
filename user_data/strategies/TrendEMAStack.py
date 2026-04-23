@@ -62,12 +62,9 @@ class TrendEMAStack(IStrategy):
         return dataframe
 
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Exit on stack break (ema9<ema21) OR ATR-based chandelier: close
-        # drops more than 2*ATR below the 22-bar rolling high-close. The
-        # chandelier catches sharp reversals that ema-cross would lag.
-        chandelier_hit = dataframe["close"] < (
-            dataframe["close"].rolling(22).max() - 2 * dataframe["atr"]
-        )
-        stack_break = dataframe["ema9"] < dataframe["ema21"]
-        dataframe.loc[stack_break | chandelier_hit, "exit_long"] = 1
+        # Patient exit: only primary stack break (ema9<ema21). Chandelier
+        # exit (round 19) cut winners without improving DD.
+        dataframe.loc[
+            dataframe["ema9"] < dataframe["ema21"], "exit_long"
+        ] = 1
         return dataframe
