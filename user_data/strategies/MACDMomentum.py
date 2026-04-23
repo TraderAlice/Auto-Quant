@@ -42,7 +42,9 @@ class MACDMomentum(IStrategy):
     startup_candle_count: int = 210
 
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        macd = ta.MACD(dataframe, fastperiod=19, slowperiod=39, signalperiod=9)
+        # signalperiod 12 (was 9). Slower signal-line EMA = crossovers fire
+        # only when MACD has truly diverged, not on shallow wiggles.
+        macd = ta.MACD(dataframe, fastperiod=19, slowperiod=39, signalperiod=12)
         dataframe["macd"] = macd["macd"]
         dataframe["macdsignal"] = macd["macdsignal"]
         dataframe["macdhist"] = macd["macdhist"]
