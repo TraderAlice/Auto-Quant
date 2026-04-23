@@ -46,17 +46,22 @@ class TrendEMAStack(IStrategy):
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Entry: ema9 cross up ema21 + slow-trend (ema21>ema50) + macro regime
-        # (close>ema200) + ATR expansion. Pair-specific EMAs (round 24) didn't
-        # improve — BTC and ETH 1h trend behavior similar enough.
+        # Entry: ema9 cross up ema21 + slow-trend + macro regime + ATR
+        # expanding + close>ema9 (entering strength, not a crossover during
+        # a pullback where price is already below fast EMA).
         ema9_cross_up_21 = (dataframe["ema9"] > dataframe["ema21"]) & (
             dataframe["ema9"].shift(1) <= dataframe["ema21"].shift(1)
         )
         slow_trend_up = dataframe["ema21"] > dataframe["ema50"]
         bull_regime = dataframe["close"] > dataframe["ema200"]
         atr_expanding = dataframe["atr"] > dataframe["atr_sma20"]
+        above_fast = dataframe["close"] > dataframe["ema9"]
         dataframe.loc[
-            ema9_cross_up_21 & slow_trend_up & bull_regime & atr_expanding,
+            ema9_cross_up_21
+            & slow_trend_up
+            & bull_regime
+            & atr_expanding
+            & above_fast,
             "enter_long",
         ] = 1
         return dataframe

@@ -42,7 +42,9 @@ class MACDMomentum(IStrategy):
     startup_candle_count: int = 210
 
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        macd = ta.MACD(dataframe, fastperiod=12, slowperiod=26, signalperiod=9)
+        # Faster MACD (8/17/9) — tests whether 1h crypto rewards earlier
+        # signals. Standard 12/26/9 was the baseline.
+        macd = ta.MACD(dataframe, fastperiod=8, slowperiod=17, signalperiod=9)
         dataframe["macd"] = macd["macd"]
         dataframe["macdsignal"] = macd["macdsignal"]
         dataframe["macdhist"] = macd["macdhist"]
@@ -52,22 +54,16 @@ class MACDMomentum(IStrategy):
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Entry: MACD cross up + MACD>0 + bull regime + ATR expanding +
-        # histogram accelerating (macdhist > prior macdhist). Confirms
-        # momentum is building, not just catching a single-bar blip.
+        # Entry: MACD cross up + MACD>0 + bull regime + ATR expanding.
+        # Histogram-accelerating filter (round 29) was tautological.
         macd_cross_up = (dataframe["macd"] > dataframe["macdsignal"]) & (
             dataframe["macd"].shift(1) <= dataframe["macdsignal"].shift(1)
         )
         positive_macd = dataframe["macd"] > 0
         bull_regime = dataframe["close"] > dataframe["ema200"]
         atr_expanding = dataframe["atr"] > dataframe["atr_sma20"]
-        hist_accelerating = dataframe["macdhist"] > dataframe["macdhist"].shift(1)
         dataframe.loc[
-            macd_cross_up
-            & positive_macd
-            & bull_regime
-            & atr_expanding
-            & hist_accelerating,
+            macd_cross_up & positive_macd & bull_regime & atr_expanding,
             "enter_long",
         ] = 1
         return dataframe
