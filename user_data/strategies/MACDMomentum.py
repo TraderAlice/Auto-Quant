@@ -47,19 +47,23 @@ class MACDMomentum(IStrategy):
         dataframe["macdsignal"] = macd["macdsignal"]
         dataframe["macdhist"] = macd["macdhist"]
         dataframe["ema200"] = ta.EMA(dataframe, timeperiod=200)
+        dataframe["atr"] = ta.ATR(dataframe, timeperiod=14)
+        dataframe["atr_sma20"] = dataframe["atr"].rolling(20).mean()
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Entry: MACD crosses above signal (momentum acceleration) AND
-        # MACD > 0 (we're in positive-momentum territory, not just a
-        # bounce off deep negative) AND bull regime (close > EMA200).
+        # Entry: MACD cross up + MACD>0 + bull regime + ATR expanding.
+        # ATR filter (same pattern that worked for TrendEMA) trades off
+        # trade count for quality — addresses round-27 fee-drag concern.
         macd_cross_up = (dataframe["macd"] > dataframe["macdsignal"]) & (
             dataframe["macd"].shift(1) <= dataframe["macdsignal"].shift(1)
         )
         positive_macd = dataframe["macd"] > 0
         bull_regime = dataframe["close"] > dataframe["ema200"]
+        atr_expanding = dataframe["atr"] > dataframe["atr_sma20"]
         dataframe.loc[
-            macd_cross_up & positive_macd & bull_regime, "enter_long"
+            macd_cross_up & positive_macd & bull_regime & atr_expanding,
+            "enter_long",
         ] = 1
         return dataframe
 
