@@ -51,19 +51,19 @@ class TrendEMAStack(IStrategy):
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         # Entry: crossover + slow-trend + macro + ATR + volume. RSI<70
         # (round 46) nudged pf up but cost Sharpe — Sharpe is primary metric.
-        # Slower crossover: ema21 cross up ema50. Fewer/bigger trend-inception
-        # signals than ema9/21. Using ema9>ema21 as an additional context
-        # filter (short-term stack must also be bullish).
-        ema21_cross_up_50 = (dataframe["ema21"] > dataframe["ema50"]) & (
-            dataframe["ema21"].shift(1) <= dataframe["ema50"].shift(1)
+        # Fast crossover: ema9 cross up ema21. Slow cross (round 65) with
+        # long hold until ema21<ema50 reversed produced -25% DD. Fast
+        # crossover + fast exit is better on 1h.
+        ema9_cross_up_21 = (dataframe["ema9"] > dataframe["ema21"]) & (
+            dataframe["ema9"].shift(1) <= dataframe["ema21"].shift(1)
         )
-        short_stack_bull = dataframe["ema9"] > dataframe["ema21"]
+        slow_trend_up = dataframe["ema21"] > dataframe["ema50"]
         bull_regime = dataframe["close"] > dataframe["ema200"]
         atr_expanding = dataframe["atr"] > dataframe["atr_sma20"]
         vol_expansion = dataframe["volume"] > dataframe["vol_sma20"]
         dataframe.loc[
-            ema21_cross_up_50
-            & short_stack_bull
+            ema9_cross_up_21
+            & slow_trend_up
             & bull_regime
             & atr_expanding
             & vol_expansion,
@@ -72,9 +72,7 @@ class TrendEMAStack(IStrategy):
         return dataframe
 
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Exit on primary stack break: ema21 < ema50 (the slow crossover
-        # used for entry reverses).
         dataframe.loc[
-            dataframe["ema21"] < dataframe["ema50"], "exit_long"
+            dataframe["ema9"] < dataframe["ema21"], "exit_long"
         ] = 1
         return dataframe
