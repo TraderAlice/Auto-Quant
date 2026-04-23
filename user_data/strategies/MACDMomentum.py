@@ -56,6 +56,7 @@ class MACDMomentum(IStrategy):
         dataframe["atr_sma20"] = dataframe["atr"].rolling(20).mean()
         dataframe["vol_sma20"] = dataframe["volume"].rolling(20).mean()
         dataframe["rsi"] = ta.RSI(dataframe, timeperiod=14)
+        dataframe["adx"] = ta.ADX(dataframe, timeperiod=14)
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
@@ -70,13 +71,15 @@ class MACDMomentum(IStrategy):
         vol_expansion = dataframe["volume"] > dataframe["vol_sma20"]
         # RSI<75. Bracket 70/75/80 → 75 optimum on Sharpe (0.67 vs 0.52/0.63).
         not_overbought = dataframe["rsi"] < 75
+        trend_strength = dataframe["adx"] > 20
         dataframe.loc[
             macd_cross_up
             & positive_macd
             & bull_regime
             & atr_expanding
             & vol_expansion
-            & not_overbought,
+            & not_overbought
+            & trend_strength,
             "enter_long",
         ] = 1
         return dataframe
