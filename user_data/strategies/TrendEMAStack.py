@@ -43,13 +43,17 @@ class TrendEMAStack(IStrategy):
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Entry = crossover event (not state) + slow-trend filter.
-        # ADX>20 filter (round 5) hurt — cut winners proportionally, net regress.
+        # Entry = crossover event + slow-trend filter + close above ema50.
+        # Requiring close>ema50 at entry avoids firing when crossover happens
+        # during a drawdown that hasn't yet pushed price above slow EMA.
         ema9_cross_up_21 = (dataframe["ema9"] > dataframe["ema21"]) & (
             dataframe["ema9"].shift(1) <= dataframe["ema21"].shift(1)
         )
         slow_trend_up = dataframe["ema21"] > dataframe["ema50"]
-        dataframe.loc[ema9_cross_up_21 & slow_trend_up, "enter_long"] = 1
+        above_slow = dataframe["close"] > dataframe["ema50"]
+        dataframe.loc[
+            ema9_cross_up_21 & slow_trend_up & above_slow, "enter_long"
+        ] = 1
         return dataframe
 
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:

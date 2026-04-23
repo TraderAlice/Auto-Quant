@@ -39,9 +39,7 @@ class MeanRevBB(IStrategy):
     startup_candle_count: int = 210
 
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # sigma=2.5 — rarer/more-extreme BB excursions. 2.0σ fires too often
-        # on ordinary volatility; 2.5σ is a genuine "oversold" print.
-        bb = ta.BBANDS(dataframe, timeperiod=20, nbdevup=2.5, nbdevdn=2.5)
+        bb = ta.BBANDS(dataframe, timeperiod=20, nbdevup=2.0, nbdevdn=2.0)
         dataframe["bb_lower"] = bb["lowerband"]
         dataframe["bb_middle"] = bb["middleband"]
         dataframe["bb_upper"] = bb["upperband"]
