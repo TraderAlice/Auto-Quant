@@ -24,10 +24,10 @@ class MeanRevBB(IStrategy):
     can_short = False
 
     minimal_roi = {"0": 100}
-    # -15% tail stop: not a trading stop (v0.1.0 + round-3 proved tight stops
-    # cut recoverable bounces), but catastrophe insurance. Only engages on
-    # the worst 2023-25 drawdowns that pushed past typical MR recovery range.
-    stoploss = -0.15
+    # No stop. Confirmed across multiple rounds: any stop tight enough to
+    # reduce DD (-5%, -15%) realizes recoverable losses and actually makes
+    # DD worse or leaves it flat while cutting profit.
+    stoploss = -0.99
 
     trailing_stop = False
     process_only_new_candles = True
@@ -48,14 +48,15 @@ class MeanRevBB(IStrategy):
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Confirmed-reversal entry: prior bar closed below lower BB, current
-        # bar closed back above it. Regime filter (close>EMA200) retained.
-        # Weekday filter (round 17) tested — not meaningful on BTC/ETH 1h.
+        # Confirmed reversal + regime + RSI<30 at prior bar (genuine oversold
+        # confluence with BB-lower print). Adds a second oversold voter.
         prev_below_lower = dataframe["close"].shift(1) < dataframe["bb_lower"].shift(1)
         now_above_lower = dataframe["close"] > dataframe["bb_lower"]
         bull_regime = dataframe["close"] > dataframe["ema200"]
+        rsi_oversold = dataframe["rsi"].shift(1) < 30
         dataframe.loc[
-            prev_below_lower & now_above_lower & bull_regime, "enter_long"
+            prev_below_lower & now_above_lower & bull_regime & rsi_oversold,
+            "enter_long",
         ] = 1
         return dataframe
 
