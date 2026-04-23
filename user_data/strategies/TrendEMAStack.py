@@ -43,12 +43,14 @@ class TrendEMAStack(IStrategy):
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        stacked = (
-            (dataframe["ema9"] > dataframe["ema21"])
-            & (dataframe["ema21"] > dataframe["ema50"])
-            & (dataframe["close"] > dataframe["ema9"])
+        # Entry = crossover event, not state — avoids re-entering every bar
+        # while the stack holds. Fire when ema9 crosses above ema21 AND ema21
+        # is already above ema50 (slow-trend filter).
+        ema9_cross_up_21 = (dataframe["ema9"] > dataframe["ema21"]) & (
+            dataframe["ema9"].shift(1) <= dataframe["ema21"].shift(1)
         )
-        dataframe.loc[stacked, "enter_long"] = 1
+        slow_trend_up = dataframe["ema21"] > dataframe["ema50"]
+        dataframe.loc[ema9_cross_up_21 & slow_trend_up, "enter_long"] = 1
         return dataframe
 
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
