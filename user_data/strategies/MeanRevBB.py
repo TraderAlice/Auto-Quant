@@ -53,33 +53,26 @@ class MeanRevBB(IStrategy):
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Confirmed reversal + regime + volume + ATR expansion. Mirrors the
-        # filter stack that made TrendEMA and MACDMomentum robust. For MR,
-        # ATR expansion = bounce is happening in a context of live volatility
-        # (price pushed through 2σ recently).
+        # Confirmed reversal + regime + volume. ATR expansion (round 41)
+        # hurt — MR signals often come from low-vol exhaustion bars, and
+        # filtering for expanding ATR removes the best setups. ATR is
+        # paradigm-specific: helps trend/momentum, hurts mean-reversion.
         prev_below_lower = dataframe["close"].shift(1) < dataframe["bb_lower"].shift(1)
         now_above_lower = dataframe["close"] > dataframe["bb_lower"]
         bull_regime = dataframe["close"] > dataframe["ema200"]
         vol_expansion = dataframe["volume"] > dataframe["vol_sma20"]
-        atr_expanding = dataframe["atr"] > dataframe["atr_sma20"]
         dataframe.loc[
-            prev_below_lower
-            & now_above_lower
-            & bull_regime
-            & vol_expansion
-            & atr_expanding,
+            prev_below_lower & now_above_lower & bull_regime & vol_expansion,
             "enter_long",
         ] = 1
         return dataframe
 
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Exit only when price hits upper band AND RSI>70 — wait for genuine
-        # overbought confirmation. Regime-break exit (round 15) cut DD but
-        # also cut profit equally by realizing recoverable losses. Same for
-        # stale-loser custom_exit (round 26).
+        # Exit at upper band + RSI>65 (was >70). Earlier exit locks in more
+        # trades. Trade-off: smaller avg winner but potentially more winners.
         dataframe.loc[
             (dataframe["close"] >= dataframe["bb_upper"])
-            & (dataframe["rsi"] > 70),
+            & (dataframe["rsi"] > 65),
             "exit_long",
         ] = 1
         return dataframe
