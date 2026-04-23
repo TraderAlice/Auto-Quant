@@ -45,9 +45,9 @@ class MeanRevBB(IStrategy):
         dataframe["bb_lower"] = bb["lowerband"]
         dataframe["bb_middle"] = bb["middleband"]
         dataframe["bb_upper"] = bb["upperband"]
-        # Regime EMA 50. Bracket: 200→100 was sharpe 0.51→0.52, profit
-        # +148%, DD -11%, pf 1.85. Testing shorter still.
-        dataframe["ema200"] = ta.EMA(dataframe, timeperiod=50)
+        # Regime EMA 100. Bracket 200/100/50 → 100 optimum (sharpe 0.52 vs
+        # 0.51 / 0.39). Column kept as "ema200" for historical continuity.
+        dataframe["ema200"] = ta.EMA(dataframe, timeperiod=100)
         dataframe["rsi"] = ta.RSI(dataframe, timeperiod=14)
         dataframe["vol_sma20"] = dataframe["volume"].rolling(20).mean()
         dataframe["atr"] = ta.ATR(dataframe, timeperiod=14)
