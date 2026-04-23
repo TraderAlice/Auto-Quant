@@ -46,7 +46,10 @@ class MeanRevBB(IStrategy):
         dataframe["bb_middle"] = bb["middleband"]
         dataframe["bb_upper"] = bb["upperband"]
         dataframe["ema200"] = ta.EMA(dataframe, timeperiod=200)
-        dataframe["rsi"] = ta.RSI(dataframe, timeperiod=14)
+        # RSI period 7 (was 14). Faster RSI reaches overbought earlier —
+        # tests whether MR's patient exit is best paired with a more
+        # responsive RSI measurement.
+        dataframe["rsi"] = ta.RSI(dataframe, timeperiod=7)
         dataframe["vol_sma20"] = dataframe["volume"].rolling(20).mean()
         dataframe["atr"] = ta.ATR(dataframe, timeperiod=14)
         dataframe["atr_sma20"] = dataframe["atr"].rolling(20).mean()
