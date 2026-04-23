@@ -48,18 +48,26 @@ class MeanRevBB(IStrategy):
         dataframe["ema200"] = ta.EMA(dataframe, timeperiod=200)
         dataframe["rsi"] = ta.RSI(dataframe, timeperiod=14)
         dataframe["vol_sma20"] = dataframe["volume"].rolling(20).mean()
+        dataframe["atr"] = ta.ATR(dataframe, timeperiod=14)
+        dataframe["atr_sma20"] = dataframe["atr"].rolling(20).mean()
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Confirmed-reversal + regime + volume expansion. Volume filter
-        # tested round 11 with BB period 20 — hurt then. Retrying at
-        # BB period 15 baseline (different signal density).
+        # Confirmed reversal + regime + volume + ATR expansion. Mirrors the
+        # filter stack that made TrendEMA and MACDMomentum robust. For MR,
+        # ATR expansion = bounce is happening in a context of live volatility
+        # (price pushed through 2σ recently).
         prev_below_lower = dataframe["close"].shift(1) < dataframe["bb_lower"].shift(1)
         now_above_lower = dataframe["close"] > dataframe["bb_lower"]
         bull_regime = dataframe["close"] > dataframe["ema200"]
         vol_expansion = dataframe["volume"] > dataframe["vol_sma20"]
+        atr_expanding = dataframe["atr"] > dataframe["atr_sma20"]
         dataframe.loc[
-            prev_below_lower & now_above_lower & bull_regime & vol_expansion,
+            prev_below_lower
+            & now_above_lower
+            & bull_regime
+            & vol_expansion
+            & atr_expanding,
             "enter_long",
         ] = 1
         return dataframe

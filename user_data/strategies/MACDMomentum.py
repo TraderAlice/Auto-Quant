@@ -48,9 +48,7 @@ class MACDMomentum(IStrategy):
         dataframe["macdhist"] = macd["macdhist"]
         dataframe["ema200"] = ta.EMA(dataframe, timeperiod=200)
         dataframe["atr"] = ta.ATR(dataframe, timeperiod=14)
-        # Longer ATR baseline (30). Smoother reference = stricter expansion
-        # criterion; tests whether 20 was load-bearing or arbitrary.
-        dataframe["atr_sma20"] = dataframe["atr"].rolling(30).mean()
+        dataframe["atr_sma20"] = dataframe["atr"].rolling(20).mean()
         dataframe["vol_sma20"] = dataframe["volume"].rolling(20).mean()
         return dataframe
 
