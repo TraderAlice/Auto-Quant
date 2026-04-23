@@ -68,11 +68,11 @@ class MeanRevBB(IStrategy):
         return dataframe
 
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Exit at upper band + RSI>65 (was >70). Earlier exit locks in more
-        # trades. Trade-off: smaller avg winner but potentially more winners.
+        # Exit at upper band + RSI>75. Testing the tighter threshold; 70 was
+        # baseline best, 65 worse. Bracket up to confirm 70 optimum.
         dataframe.loc[
             (dataframe["close"] >= dataframe["bb_upper"])
-            & (dataframe["rsi"] > 65),
+            & (dataframe["rsi"] > 75),
             "exit_long",
         ] = 1
         return dataframe
