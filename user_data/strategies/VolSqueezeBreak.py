@@ -47,12 +47,18 @@ class VolSqueezeBreak(IStrategy):
             dataframe["bb_width"].rolling(100).quantile(0.1)
         )
         dataframe["squeezed"] = dataframe["bb_width"] <= dataframe["bb_width_q10"]
+        dataframe["vol_sma20"] = dataframe["volume"].rolling(20).mean()
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+        # Volume expansion filter: a real breakout should come with above-average
+        # volume. Filters paper breakouts that lack conviction.
         prior_squeezed = dataframe["squeezed"].shift(1).fillna(False).astype(bool)
+        vol_expansion = dataframe["volume"] > dataframe["vol_sma20"]
         dataframe.loc[
-            prior_squeezed & (dataframe["close"] > dataframe["bb_upper"]),
+            prior_squeezed
+            & (dataframe["close"] > dataframe["bb_upper"])
+            & vol_expansion,
             "enter_long",
         ] = 1
         return dataframe

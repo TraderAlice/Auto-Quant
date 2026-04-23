@@ -40,27 +40,23 @@ class TrendEMAStack(IStrategy):
         dataframe["ema9"] = ta.EMA(dataframe, timeperiod=9)
         dataframe["ema21"] = ta.EMA(dataframe, timeperiod=21)
         dataframe["ema50"] = ta.EMA(dataframe, timeperiod=50)
-        dataframe["adx"] = ta.ADX(dataframe, timeperiod=14)
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Entry = crossover event, not state — avoids re-entering every bar
-        # while the stack holds. Fire when ema9 crosses above ema21, ema21
-        # is already above ema50 (slow-trend filter), AND ADX>20 (trend
-        # strength filter to skip chop).
+        # Entry = crossover event (not state) + slow-trend filter.
+        # ADX>20 filter (round 5) hurt — cut winners proportionally, net regress.
         ema9_cross_up_21 = (dataframe["ema9"] > dataframe["ema21"]) & (
             dataframe["ema9"].shift(1) <= dataframe["ema21"].shift(1)
         )
         slow_trend_up = dataframe["ema21"] > dataframe["ema50"]
-        strong_trend = dataframe["adx"] > 20
-        dataframe.loc[
-            ema9_cross_up_21 & slow_trend_up & strong_trend, "enter_long"
-        ] = 1
+        dataframe.loc[ema9_cross_up_21 & slow_trend_up, "enter_long"] = 1
         return dataframe
 
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        stack_broken = (dataframe["ema9"] < dataframe["ema21"]) | (
-            dataframe["close"] < dataframe["ema21"]
-        )
-        dataframe.loc[stack_broken, "exit_long"] = 1
+        # Patient exit: only bail on primary stack break (ema9<ema21).
+        # Previous "close < ema21" clause fired on healthy pullbacks within
+        # an uptrend — cutting winners early.
+        dataframe.loc[
+            dataframe["ema9"] < dataframe["ema21"], "exit_long"
+        ] = 1
         return dataframe
