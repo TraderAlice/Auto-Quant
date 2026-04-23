@@ -36,33 +36,39 @@ class TrendEMAStack(IStrategy):
 
     startup_candle_count: int = 210
 
+    # Pair-specific EMA periods. ETH is higher-vol on 1h and whipsaws
+    # with 9/21/50; slower 13/34/89 should reduce false crossovers there.
+    # BTC keeps the validated 9/21/50.
+    EMA_PERIODS = {
+        "BTC/USDT": (9, 21, 50),
+        "ETH/USDT": (13, 34, 89),
+    }
+
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        dataframe["ema9"] = ta.EMA(dataframe, timeperiod=9)
-        dataframe["ema21"] = ta.EMA(dataframe, timeperiod=21)
-        dataframe["ema50"] = ta.EMA(dataframe, timeperiod=50)
+        fast, mid, slow = self.EMA_PERIODS.get(metadata["pair"], (9, 21, 50))
+        dataframe["ema_fast"] = ta.EMA(dataframe, timeperiod=fast)
+        dataframe["ema_mid"] = ta.EMA(dataframe, timeperiod=mid)
+        dataframe["ema_slow"] = ta.EMA(dataframe, timeperiod=slow)
         dataframe["ema200"] = ta.EMA(dataframe, timeperiod=200)
         dataframe["atr"] = ta.ATR(dataframe, timeperiod=14)
         dataframe["atr_sma20"] = dataframe["atr"].rolling(20).mean()
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Entry: ema9 cross up ema21 + slow-trend (ema21>ema50) + macro regime
-        # (close>ema200) + ATR expansion. Faster EMAs (5/13/34 round 22)
-        # whipsaw on 1h; slower candidates not yet tested.
-        ema9_cross_up_21 = (dataframe["ema9"] > dataframe["ema21"]) & (
-            dataframe["ema9"].shift(1) <= dataframe["ema21"].shift(1)
+        fast_cross_up_mid = (dataframe["ema_fast"] > dataframe["ema_mid"]) & (
+            dataframe["ema_fast"].shift(1) <= dataframe["ema_mid"].shift(1)
         )
-        slow_trend_up = dataframe["ema21"] > dataframe["ema50"]
+        slow_trend_up = dataframe["ema_mid"] > dataframe["ema_slow"]
         bull_regime = dataframe["close"] > dataframe["ema200"]
         atr_expanding = dataframe["atr"] > dataframe["atr_sma20"]
         dataframe.loc[
-            ema9_cross_up_21 & slow_trend_up & bull_regime & atr_expanding,
+            fast_cross_up_mid & slow_trend_up & bull_regime & atr_expanding,
             "enter_long",
         ] = 1
         return dataframe
 
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         dataframe.loc[
-            dataframe["ema9"] < dataframe["ema21"], "exit_long"
+            dataframe["ema_fast"] < dataframe["ema_mid"], "exit_long"
         ] = 1
         return dataframe
