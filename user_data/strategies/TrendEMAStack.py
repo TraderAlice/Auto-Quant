@@ -41,9 +41,9 @@ class TrendEMAStack(IStrategy):
         dataframe["ema21"] = ta.EMA(dataframe, timeperiod=21)
         dataframe["ema50"] = ta.EMA(dataframe, timeperiod=50)
         dataframe["ema200"] = ta.EMA(dataframe, timeperiod=200)
-        # ATR period 21 (was 14). Slower ATR reference for the expansion
-        # filter — tests whether 14 was over-responsive.
-        dataframe["atr"] = ta.ATR(dataframe, timeperiod=21)
+        # ATR 28. Bracket: 14→21 was sharpe 0.34→0.36, pf 1.78→1.92.
+        # Testing slower still.
+        dataframe["atr"] = ta.ATR(dataframe, timeperiod=28)
         dataframe["atr_sma20"] = dataframe["atr"].rolling(20).mean()
         dataframe["vol_sma20"] = dataframe["volume"].rolling(20).mean()
         return dataframe
