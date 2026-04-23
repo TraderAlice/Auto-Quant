@@ -53,18 +53,22 @@ class MACDMomentum(IStrategy):
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Entry: MACD cross up + bull regime + ATR + volume. Removing the
-        # MACD>0 requirement to catch earlier momentum recoveries from
-        # negative — bull-regime filter (close>EMA200) already ensures
-        # macro context is constructive.
+        # Entry: MACD cross up + MACD>0 + bull regime + ATR + volume.
+        # Dropping MACD>0 (round 46) admitted early-recovery crossovers
+        # from negative which mostly failed.
         macd_cross_up = (dataframe["macd"] > dataframe["macdsignal"]) & (
             dataframe["macd"].shift(1) <= dataframe["macdsignal"].shift(1)
         )
+        positive_macd = dataframe["macd"] > 0
         bull_regime = dataframe["close"] > dataframe["ema200"]
         atr_expanding = dataframe["atr"] > dataframe["atr_sma20"]
         vol_expansion = dataframe["volume"] > dataframe["vol_sma20"]
         dataframe.loc[
-            macd_cross_up & bull_regime & atr_expanding & vol_expansion,
+            macd_cross_up
+            & positive_macd
+            & bull_regime
+            & atr_expanding
+            & vol_expansion,
             "enter_long",
         ] = 1
         return dataframe

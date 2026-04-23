@@ -44,12 +44,11 @@ class TrendEMAStack(IStrategy):
         dataframe["atr"] = ta.ATR(dataframe, timeperiod=14)
         dataframe["atr_sma20"] = dataframe["atr"].rolling(20).mean()
         dataframe["vol_sma20"] = dataframe["volume"].rolling(20).mean()
-        dataframe["rsi"] = ta.RSI(dataframe, timeperiod=14)
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Entry: crossover + slow-trend + macro + ATR + volume + RSI<70
-        # (don't chase breakouts that are already overbought).
+        # Entry: crossover + slow-trend + macro + ATR + volume. RSI<70
+        # (round 46) nudged pf up but cost Sharpe — Sharpe is primary metric.
         ema9_cross_up_21 = (dataframe["ema9"] > dataframe["ema21"]) & (
             dataframe["ema9"].shift(1) <= dataframe["ema21"].shift(1)
         )
@@ -57,14 +56,12 @@ class TrendEMAStack(IStrategy):
         bull_regime = dataframe["close"] > dataframe["ema200"]
         atr_expanding = dataframe["atr"] > dataframe["atr_sma20"]
         vol_expansion = dataframe["volume"] > dataframe["vol_sma20"]
-        not_overbought = dataframe["rsi"] < 70
         dataframe.loc[
             ema9_cross_up_21
             & slow_trend_up
             & bull_regime
             & atr_expanding
-            & vol_expansion
-            & not_overbought,
+            & vol_expansion,
             "enter_long",
         ] = 1
         return dataframe
