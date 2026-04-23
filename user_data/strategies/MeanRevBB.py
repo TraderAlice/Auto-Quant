@@ -45,9 +45,9 @@ class MeanRevBB(IStrategy):
         dataframe["bb_lower"] = bb["lowerband"]
         dataframe["bb_middle"] = bb["middleband"]
         dataframe["bb_upper"] = bb["upperband"]
-        # Regime EMA 75. Brackets: 200 (0.51), 100 (0.52), 50 (0.39).
-        # Bisecting between 50 and 100.
-        dataframe["ema200"] = ta.EMA(dataframe, timeperiod=75)
+        # Regime EMA 100. Brackets: 200 (0.51), 100 (0.52), 75 (0.46),
+        # 50 (0.39). 100 is optimum.
+        dataframe["ema200"] = ta.EMA(dataframe, timeperiod=100)
         dataframe["rsi"] = ta.RSI(dataframe, timeperiod=14)
         dataframe["vol_sma20"] = dataframe["volume"].rolling(20).mean()
         dataframe["atr"] = ta.ATR(dataframe, timeperiod=14)
