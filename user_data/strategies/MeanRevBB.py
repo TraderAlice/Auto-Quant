@@ -1,0 +1,51 @@
+"""
+MeanRevBB — Bollinger lower-band bounce
+
+Paradigm: mean-reversion
+Hypothesis: BTC/ETH 1h bars that close below the lower Bollinger Band
+            (20-period, sigma=2.0) tend to mean-revert back to the middle band
+            within ~10-20 bars. No exit_profit_only trick — we want to measure
+            the raw BB bounce edge cleanly.
+Parent: root
+Created: pending-first-commit
+Status: active
+"""
+
+from pandas import DataFrame
+import talib.abstract as ta
+
+from freqtrade.strategy import IStrategy
+
+
+class MeanRevBB(IStrategy):
+    INTERFACE_VERSION = 3
+
+    timeframe = "1h"
+    can_short = False
+
+    minimal_roi = {"0": 100}
+    stoploss = -0.99
+
+    trailing_stop = False
+    process_only_new_candles = True
+
+    use_exit_signal = True
+    exit_profit_only = False
+    ignore_roi_if_entry_signal = False
+
+    startup_candle_count: int = 30
+
+    def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+        bb = ta.BBANDS(dataframe, timeperiod=20, nbdevup=2.0, nbdevdn=2.0)
+        dataframe["bb_lower"] = bb["lowerband"]
+        dataframe["bb_middle"] = bb["middleband"]
+        dataframe["bb_upper"] = bb["upperband"]
+        return dataframe
+
+    def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+        dataframe.loc[dataframe["close"] < dataframe["bb_lower"], "enter_long"] = 1
+        return dataframe
+
+    def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+        dataframe.loc[dataframe["close"] >= dataframe["bb_middle"], "exit_long"] = 1
+        return dataframe
