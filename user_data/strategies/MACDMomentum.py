@@ -52,30 +52,25 @@ class MACDMomentum(IStrategy):
         # MR benefits from regime reactivity, trend/momentum prefers stable
         # slow reference.
         dataframe["ema200"] = ta.EMA(dataframe, timeperiod=200)
-        dataframe["ema50"] = ta.EMA(dataframe, timeperiod=50)
         dataframe["atr"] = ta.ATR(dataframe, timeperiod=14)
         dataframe["atr_sma20"] = dataframe["atr"].rolling(20).mean()
         dataframe["vol_sma20"] = dataframe["volume"].rolling(20).mean()
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Entry: MACD cross up + MACD>0 + bull regime (close>ema200) +
-        # medium regime (close>ema50) + ATR + volume. Medium-term trend
-        # alignment in addition to macro; addresses crossovers that happen
-        # during temporary dips within a bull macro regime.
+        # Entry: MACD cross up + MACD>0 + bull regime + ATR + volume.
+        # close>ema50 (round 62) was redundant with existing filters.
         macd_cross_up = (dataframe["macd"] > dataframe["macdsignal"]) & (
             dataframe["macd"].shift(1) <= dataframe["macdsignal"].shift(1)
         )
         positive_macd = dataframe["macd"] > 0
         bull_regime = dataframe["close"] > dataframe["ema200"]
-        med_regime = dataframe["close"] > dataframe["ema50"]
         atr_expanding = dataframe["atr"] > dataframe["atr_sma20"]
         vol_expansion = dataframe["volume"] > dataframe["vol_sma20"]
         dataframe.loc[
             macd_cross_up
             & positive_macd
             & bull_regime
-            & med_regime
             & atr_expanding
             & vol_expansion,
             "enter_long",
@@ -83,12 +78,8 @@ class MACDMomentum(IStrategy):
         return dataframe
 
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Exit on MACD cross below signal (momentum fading). Patient exit
-        # (macd<0, round 35) traded Sharpe for profit; cross-down is the
-        # optimum for Sharpe.
-        dataframe.loc[
-            (dataframe["macd"] < dataframe["macdsignal"])
-            & (dataframe["macd"].shift(1) >= dataframe["macdsignal"].shift(1)),
-            "exit_long",
-        ] = 1
+        # Exit on MACD < signal for 2 consecutive bars — confirmed cross-down.
+        # Filters 1-bar whipsaw cross-downs that immediately cross back up.
+        below_signal = dataframe["macd"] < dataframe["macdsignal"]
+        dataframe.loc[below_signal & below_signal.shift(1).fillna(False).astype(bool), "exit_long"] = 1
         return dataframe
