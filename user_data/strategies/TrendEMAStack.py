@@ -40,8 +40,8 @@ class TrendEMAStack(IStrategy):
         dataframe["ema9"] = ta.EMA(dataframe, timeperiod=9)
         dataframe["ema21"] = ta.EMA(dataframe, timeperiod=21)
         dataframe["ema50"] = ta.EMA(dataframe, timeperiod=50)
-        # Regime EMA 100 (was 200). Matching MR's round-54 win.
-        dataframe["ema200"] = ta.EMA(dataframe, timeperiod=100)
+        # Regime EMA 200. Shorter 100 (round 57) hurt trend-follower.
+        dataframe["ema200"] = ta.EMA(dataframe, timeperiod=200)
         # ATR 21. Bracket 14/21/28 → 21 optimum on Sharpe (0.36 vs 0.34/0.35).
         dataframe["atr"] = ta.ATR(dataframe, timeperiod=21)
         dataframe["atr_sma20"] = dataframe["atr"].rolling(20).mean()

@@ -48,9 +48,10 @@ class MACDMomentum(IStrategy):
         dataframe["macd"] = macd["macd"]
         dataframe["macdsignal"] = macd["macdsignal"]
         dataframe["macdhist"] = macd["macdhist"]
-        # Regime EMA 100 (was 200). Matching MR's round-54 win: shorter
-        # regime reference is more reactive to actual market transitions.
-        dataframe["ema200"] = ta.EMA(dataframe, timeperiod=100)
+        # Regime EMA 200. Shorter 100 (round 57) hurt — paradigm-specific:
+        # MR benefits from regime reactivity, trend/momentum prefers stable
+        # slow reference.
+        dataframe["ema200"] = ta.EMA(dataframe, timeperiod=200)
         dataframe["atr"] = ta.ATR(dataframe, timeperiod=14)
         dataframe["atr_sma20"] = dataframe["atr"].rolling(20).mean()
         dataframe["vol_sma20"] = dataframe["volume"].rolling(20).mean()
