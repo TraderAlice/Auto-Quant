@@ -45,18 +45,20 @@ class MeanRevBB(IStrategy):
         dataframe["bb_upper"] = bb["upperband"]
         dataframe["ema200"] = ta.EMA(dataframe, timeperiod=200)
         dataframe["rsi"] = ta.RSI(dataframe, timeperiod=14)
+        dataframe["dow"] = dataframe["date"].dt.dayofweek  # 0=Mon..6=Sun
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Confirmed-reversal entry: prior bar closed below lower BB, current
-        # bar closed back above it. Regime filter (close>EMA200) retained.
-        # Volume filter tested round 11 — hurt MR edge (reversals often
-        # happen on low-vol capitulation, not high-vol). Removed.
+        # Confirmed reversal + regime + weekday filter. Crypto weekends have
+        # thin participation; MR signals there tend to be noise. dow<5 keeps
+        # us to Mon-Fri entries (exits still fire any day).
         prev_below_lower = dataframe["close"].shift(1) < dataframe["bb_lower"].shift(1)
         now_above_lower = dataframe["close"] > dataframe["bb_lower"]
         bull_regime = dataframe["close"] > dataframe["ema200"]
+        weekday = dataframe["dow"] < 5
         dataframe.loc[
-            prev_below_lower & now_above_lower & bull_regime, "enter_long"
+            prev_below_lower & now_above_lower & bull_regime & weekday,
+            "enter_long",
         ] = 1
         return dataframe
 
