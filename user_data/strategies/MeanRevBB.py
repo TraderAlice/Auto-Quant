@@ -33,17 +33,24 @@ class MeanRevBB(IStrategy):
     exit_profit_only = False
     ignore_roi_if_entry_signal = False
 
-    startup_candle_count: int = 30
+    startup_candle_count: int = 210
 
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         bb = ta.BBANDS(dataframe, timeperiod=20, nbdevup=2.0, nbdevdn=2.0)
         dataframe["bb_lower"] = bb["lowerband"]
         dataframe["bb_middle"] = bb["middleband"]
         dataframe["bb_upper"] = bb["upperband"]
+        dataframe["ema200"] = ta.EMA(dataframe, timeperiod=200)
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        dataframe.loc[dataframe["close"] < dataframe["bb_lower"], "enter_long"] = 1
+        # Regime filter: only bounce-bounce in bullish regime to avoid catching
+        # knives during downtrends. Close below lower BB AND close above EMA200.
+        dataframe.loc[
+            (dataframe["close"] < dataframe["bb_lower"])
+            & (dataframe["close"] > dataframe["ema200"]),
+            "enter_long",
+        ] = 1
         return dataframe
 
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
