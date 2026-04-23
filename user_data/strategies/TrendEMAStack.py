@@ -43,17 +43,26 @@ class TrendEMAStack(IStrategy):
         dataframe["ema200"] = ta.EMA(dataframe, timeperiod=200)
         dataframe["atr"] = ta.ATR(dataframe, timeperiod=14)
         dataframe["atr_sma20"] = dataframe["atr"].rolling(20).mean()
+        dataframe["vol_sma20"] = dataframe["volume"].rolling(20).mean()
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+        # Entry: crossover + slow-trend + macro + ATR + volume expansion.
+        # Volume filter worked for MACDMomentum round 37 (pf 1.57→1.71);
+        # applying the same pattern here.
         ema9_cross_up_21 = (dataframe["ema9"] > dataframe["ema21"]) & (
             dataframe["ema9"].shift(1) <= dataframe["ema21"].shift(1)
         )
         slow_trend_up = dataframe["ema21"] > dataframe["ema50"]
         bull_regime = dataframe["close"] > dataframe["ema200"]
         atr_expanding = dataframe["atr"] > dataframe["atr_sma20"]
+        vol_expansion = dataframe["volume"] > dataframe["vol_sma20"]
         dataframe.loc[
-            ema9_cross_up_21 & slow_trend_up & bull_regime & atr_expanding,
+            ema9_cross_up_21
+            & slow_trend_up
+            & bull_regime
+            & atr_expanding
+            & vol_expansion,
             "enter_long",
         ] = 1
         return dataframe
