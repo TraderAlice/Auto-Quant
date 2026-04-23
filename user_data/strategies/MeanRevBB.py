@@ -60,7 +60,9 @@ class MeanRevBB(IStrategy):
         prev_below_lower = dataframe["close"].shift(1) < dataframe["bb_lower"].shift(1)
         now_above_lower = dataframe["close"] > dataframe["bb_lower"]
         bull_regime = dataframe["close"] > dataframe["ema200"]
-        vol_expansion = dataframe["volume"] > dataframe["vol_sma20"]
+        # Stronger volume filter: 1.5x SMA20. Genuine reversals print with
+        # noticeable volume, not just "above average."
+        vol_expansion = dataframe["volume"] > dataframe["vol_sma20"] * 1.5
         dataframe.loc[
             prev_below_lower & now_above_lower & bull_regime & vol_expansion,
             "enter_long",
