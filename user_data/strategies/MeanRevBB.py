@@ -45,7 +45,9 @@ class MeanRevBB(IStrategy):
         dataframe["bb_lower"] = bb["lowerband"]
         dataframe["bb_middle"] = bb["middleband"]
         dataframe["bb_upper"] = bb["upperband"]
-        dataframe["ema200"] = ta.EMA(dataframe, timeperiod=200)
+        # Regime filter period 100 (was 200). Shorter = more reactive to
+        # medium-term regime shifts. Test whether 200 was over-conservative.
+        dataframe["ema200"] = ta.EMA(dataframe, timeperiod=100)
         dataframe["rsi"] = ta.RSI(dataframe, timeperiod=14)
         dataframe["vol_sma20"] = dataframe["volume"].rolling(20).mean()
         dataframe["atr"] = ta.ATR(dataframe, timeperiod=14)
