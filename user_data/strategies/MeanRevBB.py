@@ -39,10 +39,9 @@ class MeanRevBB(IStrategy):
     startup_candle_count: int = 210
 
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # BB period 15 (was 20). Shorter lookback = more sensitive to recent
-        # volatility, should fire more signals. Tests whether MR edge scales
-        # with trade count or whether 20-period was load-bearing.
-        bb = ta.BBANDS(dataframe, timeperiod=15, nbdevup=2.0, nbdevdn=2.0)
+        # BB period 10 — even more responsive. Round 31 showed BB 15 >> 20
+        # (sharpe 0.29→0.45). Bracketing further to find the sweet spot.
+        bb = ta.BBANDS(dataframe, timeperiod=10, nbdevup=2.0, nbdevdn=2.0)
         dataframe["bb_lower"] = bb["lowerband"]
         dataframe["bb_middle"] = bb["middleband"]
         dataframe["bb_upper"] = bb["upperband"]
