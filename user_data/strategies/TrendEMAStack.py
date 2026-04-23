@@ -51,24 +51,25 @@ class TrendEMAStack(IStrategy):
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         # Entry: crossover + slow-trend + macro + ATR + volume. RSI<70
         # (round 46) nudged pf up but cost Sharpe — Sharpe is primary metric.
-        # Fast crossover: ema9 cross up ema21. Slow cross (round 65) with
-        # long hold until ema21<ema50 reversed produced -25% DD. Fast
-        # crossover + fast exit is better on 1h.
+        # Dual entry: (a) ema9 cross up ema21 (trend inception), OR
+        # (b) pullback-to-ema21 in strong uptrend (close just crossed up
+        # through ema21 after being below). Both require the same filter
+        # stack to fire. The pullback path catches continuation moves
+        # that the crossover alone misses.
         ema9_cross_up_21 = (dataframe["ema9"] > dataframe["ema21"]) & (
             dataframe["ema9"].shift(1) <= dataframe["ema21"].shift(1)
+        )
+        pullback_reclaim = (dataframe["close"] > dataframe["ema21"]) & (
+            dataframe["close"].shift(1) <= dataframe["ema21"].shift(1)
         )
         slow_trend_up = dataframe["ema21"] > dataframe["ema50"]
         bull_regime = dataframe["close"] > dataframe["ema200"]
         atr_expanding = dataframe["atr"] > dataframe["atr_sma20"]
         vol_expansion = dataframe["volume"] > dataframe["vol_sma20"]
-        dataframe.loc[
-            ema9_cross_up_21
-            & slow_trend_up
-            & bull_regime
-            & atr_expanding
-            & vol_expansion,
-            "enter_long",
-        ] = 1
+        entry_signal = (ema9_cross_up_21 | pullback_reclaim) & (
+            slow_trend_up & bull_regime & atr_expanding & vol_expansion
+        )
+        dataframe.loc[entry_signal, "enter_long"] = 1
         return dataframe
 
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
