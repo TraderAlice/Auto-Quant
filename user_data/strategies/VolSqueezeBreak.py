@@ -26,13 +26,7 @@ class VolSqueezeBreak(IStrategy):
     minimal_roi = {"0": 100}
     stoploss = -0.99
 
-    # Trailing stop: once a trade gets +3% profit, lock in at +1%. Protects
-    # squeeze-break winners from full reversals. Round-6 analysis showed
-    # losing-trade DD is this strategy's weak spot.
-    trailing_stop = True
-    trailing_stop_positive = 0.01
-    trailing_stop_positive_offset = 0.03
-    trailing_only_offset_is_reached = True
+    trailing_stop = False
     process_only_new_candles = True
 
     use_exit_signal = True
@@ -57,15 +51,14 @@ class VolSqueezeBreak(IStrategy):
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Volume expansion filter: a real breakout should come with above-average
-        # volume. Filters paper breakouts that lack conviction.
+        # Stricter breakout: require close > upper by 0.5% of price (not just
+        # touch). Filters borderline breaks that mean-revert immediately.
+        # Volume expansion filter retained.
         prior_squeezed = dataframe["squeezed"].shift(1).fillna(False).astype(bool)
         vol_expansion = dataframe["volume"] > dataframe["vol_sma20"]
+        strong_break = dataframe["close"] > dataframe["bb_upper"] * 1.005
         dataframe.loc[
-            prior_squeezed
-            & (dataframe["close"] > dataframe["bb_upper"])
-            & vol_expansion,
-            "enter_long",
+            prior_squeezed & strong_break & vol_expansion, "enter_long"
         ] = 1
         return dataframe
 
