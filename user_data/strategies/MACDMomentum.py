@@ -78,8 +78,11 @@ class MACDMomentum(IStrategy):
         return dataframe
 
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Exit on MACD < signal for 2 consecutive bars — confirmed cross-down.
-        # Filters 1-bar whipsaw cross-downs that immediately cross back up.
-        below_signal = dataframe["macd"] < dataframe["macdsignal"]
-        dataframe.loc[below_signal & below_signal.shift(1).fillna(False).astype(bool), "exit_long"] = 1
+        # Exit on MACD cross below signal (1-bar event). 2-bar confirmation
+        # (round 63) delayed exits and cost Sharpe 0.62→0.52.
+        dataframe.loc[
+            (dataframe["macd"] < dataframe["macdsignal"])
+            & (dataframe["macd"].shift(1) >= dataframe["macdsignal"].shift(1)),
+            "exit_long",
+        ] = 1
         return dataframe
