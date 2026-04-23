@@ -42,8 +42,6 @@ class MACDMomentum(IStrategy):
     startup_candle_count: int = 210
 
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Slower MACD (19/39/9) — round 30 faster 8/17/9 was noisier.
-        # Testing the opposite direction from the 12/26/9 baseline.
         macd = ta.MACD(dataframe, fastperiod=19, slowperiod=39, signalperiod=9)
         dataframe["macd"] = macd["macd"]
         dataframe["macdsignal"] = macd["macdsignal"]
@@ -51,19 +49,26 @@ class MACDMomentum(IStrategy):
         dataframe["ema200"] = ta.EMA(dataframe, timeperiod=200)
         dataframe["atr"] = ta.ATR(dataframe, timeperiod=14)
         dataframe["atr_sma20"] = dataframe["atr"].rolling(20).mean()
+        dataframe["vol_sma20"] = dataframe["volume"].rolling(20).mean()
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Entry: MACD cross up + MACD>0 + bull regime + ATR expanding.
-        # Histogram-accelerating filter (round 29) was tautological.
+        # Entry: MACD cross up + MACD>0 + bull regime + ATR expanding +
+        # volume expanding. Third confirmation (vol) should filter
+        # low-conviction momentum prints that don't sustain.
         macd_cross_up = (dataframe["macd"] > dataframe["macdsignal"]) & (
             dataframe["macd"].shift(1) <= dataframe["macdsignal"].shift(1)
         )
         positive_macd = dataframe["macd"] > 0
         bull_regime = dataframe["close"] > dataframe["ema200"]
         atr_expanding = dataframe["atr"] > dataframe["atr_sma20"]
+        vol_expansion = dataframe["volume"] > dataframe["vol_sma20"]
         dataframe.loc[
-            macd_cross_up & positive_macd & bull_regime & atr_expanding,
+            macd_cross_up
+            & positive_macd
+            & bull_regime
+            & atr_expanding
+            & vol_expansion,
             "enter_long",
         ] = 1
         return dataframe

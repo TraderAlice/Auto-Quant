@@ -39,10 +39,9 @@ class MeanRevBB(IStrategy):
     startup_candle_count: int = 210
 
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # BB period 15, sigma 1.8 (loosen). More frequent reversal prints
-        # while still statistically meaningful. Period bracket: 20/15/10
-        # → 15 wins. Sigma now bracketing 2.5/2.0/1.8.
-        bb = ta.BBANDS(dataframe, timeperiod=15, nbdevup=1.8, nbdevdn=1.8)
+        # BB period 15, sigma 2.0. Brackets confirmed: period 20/15/10 →
+        # 15 wins; sigma 2.5/2.0/1.8 → 2.0 wins.
+        bb = ta.BBANDS(dataframe, timeperiod=15, nbdevup=2.0, nbdevdn=2.0)
         dataframe["bb_lower"] = bb["lowerband"]
         dataframe["bb_middle"] = bb["middleband"]
         dataframe["bb_upper"] = bb["upperband"]
