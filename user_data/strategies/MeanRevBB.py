@@ -11,12 +11,9 @@ Created: pending-first-commit
 Status: active
 """
 
-from datetime import datetime
-
 from pandas import DataFrame
 import talib.abstract as ta
 
-from freqtrade.persistence import Trade
 from freqtrade.strategy import IStrategy
 
 
@@ -65,26 +62,11 @@ class MeanRevBB(IStrategy):
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         # Exit only when price hits upper band AND RSI>70 — wait for genuine
         # overbought confirmation. Regime-break exit (round 15) cut DD but
-        # also cut profit equally by realizing recoverable losses.
+        # also cut profit equally by realizing recoverable losses. Same for
+        # stale-loser custom_exit (round 26).
         dataframe.loc[
             (dataframe["close"] >= dataframe["bb_upper"])
             & (dataframe["rsi"] > 70),
             "exit_long",
         ] = 1
         return dataframe
-
-    def custom_exit(
-        self,
-        pair: str,
-        trade: Trade,
-        current_time: datetime,
-        current_rate: float,
-        current_profit: float,
-        **kwargs,
-    ) -> str | None:
-        # Stale-loser exit: trade held >96 bars (4 days) AND still losing >5%.
-        # Targets truly stuck positions without cutting normal recoveries.
-        age_hours = (current_time - trade.open_date_utc).total_seconds() / 3600
-        if age_hours > 96 and current_profit < -0.05:
-            return "stale_loser"
-        return None
