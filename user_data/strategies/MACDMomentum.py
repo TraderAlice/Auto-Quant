@@ -68,7 +68,7 @@ class MACDMomentum(IStrategy):
         bull_regime = dataframe["close"] > dataframe["ema200"]
         atr_expanding = dataframe["atr"] > dataframe["atr_sma20"]
         vol_expansion = dataframe["volume"] > dataframe["vol_sma20"]
-        not_overbought = dataframe["rsi"] < 75
+        not_overbought = dataframe["rsi"] < 70
         dataframe.loc[
             macd_cross_up
             & positive_macd
