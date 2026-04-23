@@ -63,8 +63,15 @@ class MeanRevBB(IStrategy):
         bull_regime = dataframe["close"] > dataframe["ema200"]
         # Volume bracket: 1.0x (0.52), 1.25x (0.32), 1.5x (0.25). 1.0x wins.
         vol_expansion = dataframe["volume"] > dataframe["vol_sma20"]
+        # RSI<75 filter applied from MACDMomentum round-73 win — don't enter
+        # if already overbought (shouldn't happen on MR bounces but gate it).
+        not_overbought = dataframe["rsi"] < 75
         dataframe.loc[
-            prev_below_lower & now_above_lower & bull_regime & vol_expansion,
+            prev_below_lower
+            & now_above_lower
+            & bull_regime
+            & vol_expansion
+            & not_overbought,
             "enter_long",
         ] = 1
         return dataframe

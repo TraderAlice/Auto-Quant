@@ -46,6 +46,7 @@ class TrendEMAStack(IStrategy):
         dataframe["atr"] = ta.ATR(dataframe, timeperiod=21)
         dataframe["atr_sma20"] = dataframe["atr"].rolling(20).mean()
         dataframe["vol_sma20"] = dataframe["volume"].rolling(20).mean()
+        dataframe["rsi"] = ta.RSI(dataframe, timeperiod=14)
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
@@ -61,12 +62,15 @@ class TrendEMAStack(IStrategy):
         bull_regime = dataframe["close"] > dataframe["ema200"]
         atr_expanding = dataframe["atr"] > dataframe["atr_sma20"]
         vol_expansion = dataframe["volume"] > dataframe["vol_sma20"]
+        # RSI<75 applied from MACDMomentum round-73 win.
+        not_overbought = dataframe["rsi"] < 75
         dataframe.loc[
             ema9_cross_up_21
             & slow_trend_up
             & bull_regime
             & atr_expanding
-            & vol_expansion,
+            & vol_expansion
+            & not_overbought,
             "enter_long",
         ] = 1
         return dataframe
