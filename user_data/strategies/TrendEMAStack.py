@@ -46,31 +46,28 @@ class TrendEMAStack(IStrategy):
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Entry layers: crossover event, slow-trend, macro regime, ATR
-        # expansion, and green-candle confirmation (close>open on the
-        # signal bar — ensures bullish momentum closes with us, not against).
+        # Entry layers: crossover event + slow-trend + macro regime + ATR
+        # expansion. Green-candle confirmation (round 18) hurt — crossover
+        # bars can close red intra-bar even on genuine signals.
         ema9_cross_up_21 = (dataframe["ema9"] > dataframe["ema21"]) & (
             dataframe["ema9"].shift(1) <= dataframe["ema21"].shift(1)
         )
         slow_trend_up = dataframe["ema21"] > dataframe["ema50"]
         bull_regime = dataframe["close"] > dataframe["ema200"]
         atr_expanding = dataframe["atr"] > dataframe["atr_sma20"]
-        green_candle = dataframe["close"] > dataframe["open"]
         dataframe.loc[
-            ema9_cross_up_21
-            & slow_trend_up
-            & bull_regime
-            & atr_expanding
-            & green_candle,
+            ema9_cross_up_21 & slow_trend_up & bull_regime & atr_expanding,
             "enter_long",
         ] = 1
         return dataframe
 
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Patient exit: only bail on primary stack break (ema9<ema21).
-        # Previous "close < ema21" clause fired on healthy pullbacks within
-        # an uptrend — cutting winners early.
-        dataframe.loc[
-            dataframe["ema9"] < dataframe["ema21"], "exit_long"
-        ] = 1
+        # Exit on stack break (ema9<ema21) OR ATR-based chandelier: close
+        # drops more than 2*ATR below the 22-bar rolling high-close. The
+        # chandelier catches sharp reversals that ema-cross would lag.
+        chandelier_hit = dataframe["close"] < (
+            dataframe["close"].rolling(22).max() - 2 * dataframe["atr"]
+        )
+        stack_break = dataframe["ema9"] < dataframe["ema21"]
+        dataframe.loc[stack_break | chandelier_hit, "exit_long"] = 1
         return dataframe
