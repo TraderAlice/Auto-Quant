@@ -56,7 +56,7 @@ class VolSqueezeBreak(IStrategy):
         # Volume expansion filter retained.
         prior_squeezed = dataframe["squeezed"].shift(1).fillna(False).astype(bool)
         vol_expansion = dataframe["volume"] > dataframe["vol_sma20"]
-        strong_break = dataframe["close"] > dataframe["bb_upper"] * 1.005
+        strong_break = dataframe["close"] > dataframe["bb_upper"] * 1.003
         dataframe.loc[
             prior_squeezed & strong_break & vol_expansion, "enter_long"
         ] = 1

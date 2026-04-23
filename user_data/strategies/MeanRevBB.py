@@ -44,6 +44,7 @@ class MeanRevBB(IStrategy):
         dataframe["bb_middle"] = bb["middleband"]
         dataframe["bb_upper"] = bb["upperband"]
         dataframe["ema200"] = ta.EMA(dataframe, timeperiod=200)
+        dataframe["rsi"] = ta.RSI(dataframe, timeperiod=14)
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
@@ -60,8 +61,12 @@ class MeanRevBB(IStrategy):
         return dataframe
 
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Exit at upper band, not middle. Round-3 analysis: wr 66% with pf<1
-        # means winners too small. Extending exit target trades wr for bigger
-        # winners; regime filter keeps us in a context where overshoot is plausible.
-        dataframe.loc[dataframe["close"] >= dataframe["bb_upper"], "exit_long"] = 1
+        # Exit only when BOTH price hits upper band AND RSI>70 — wait for
+        # genuine overbought confirmation. Stops exiting on a mere upper-band
+        # tag in a strong move that still has legs.
+        dataframe.loc[
+            (dataframe["close"] >= dataframe["bb_upper"])
+            & (dataframe["rsi"] > 70),
+            "exit_long",
+        ] = 1
         return dataframe
