@@ -41,19 +41,23 @@ class TrendEMAStack(IStrategy):
         dataframe["ema21"] = ta.EMA(dataframe, timeperiod=21)
         dataframe["ema50"] = ta.EMA(dataframe, timeperiod=50)
         dataframe["ema200"] = ta.EMA(dataframe, timeperiod=200)
+        dataframe["atr"] = ta.ATR(dataframe, timeperiod=14)
+        dataframe["atr_sma20"] = dataframe["atr"].rolling(20).mean()
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Crossover event + slow-trend + macro-regime (close>ema200).
-        # The ema200 filter is the same one that worked for MeanRevBB — long
-        # trend-followers shouldn't fight multi-day downtrends.
+        # Entry layers: crossover event, slow-trend filter, macro regime,
+        # and ATR-expansion — trend breakouts work in expanding-vol regimes;
+        # firing in quiet markets tends to produce micro-trends that reverse.
         ema9_cross_up_21 = (dataframe["ema9"] > dataframe["ema21"]) & (
             dataframe["ema9"].shift(1) <= dataframe["ema21"].shift(1)
         )
         slow_trend_up = dataframe["ema21"] > dataframe["ema50"]
         bull_regime = dataframe["close"] > dataframe["ema200"]
+        atr_expanding = dataframe["atr"] > dataframe["atr_sma20"]
         dataframe.loc[
-            ema9_cross_up_21 & slow_trend_up & bull_regime, "enter_long"
+            ema9_cross_up_21 & slow_trend_up & bull_regime & atr_expanding,
+            "enter_long",
         ] = 1
         return dataframe
 
