@@ -44,19 +44,18 @@ class MeanRevBB(IStrategy):
         dataframe["bb_middle"] = bb["middleband"]
         dataframe["bb_upper"] = bb["upperband"]
         dataframe["ema200"] = ta.EMA(dataframe, timeperiod=200)
-        dataframe["vol_sma20"] = dataframe["volume"].rolling(20).mean()
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Confirmed reversal + regime + volume. Require above-average volume
-        # on the reversal bar — genuine reversals show conviction.
+        # Confirmed-reversal entry: prior bar closed below lower BB, current
+        # bar closed back above it. Regime filter (close>EMA200) retained.
+        # Volume filter tested round 11 — hurt MR edge (reversals often
+        # happen on low-vol capitulation, not high-vol). Removed.
         prev_below_lower = dataframe["close"].shift(1) < dataframe["bb_lower"].shift(1)
         now_above_lower = dataframe["close"] > dataframe["bb_lower"]
         bull_regime = dataframe["close"] > dataframe["ema200"]
-        vol_expansion = dataframe["volume"] > dataframe["vol_sma20"]
         dataframe.loc[
-            prev_below_lower & now_above_lower & bull_regime & vol_expansion,
-            "enter_long",
+            prev_below_lower & now_above_lower & bull_regime, "enter_long"
         ] = 1
         return dataframe
 

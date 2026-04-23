@@ -34,25 +34,26 @@ class TrendEMAStack(IStrategy):
     exit_profit_only = False
     ignore_roi_if_entry_signal = False
 
-    startup_candle_count: int = 60
+    startup_candle_count: int = 210
 
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         dataframe["ema9"] = ta.EMA(dataframe, timeperiod=9)
         dataframe["ema21"] = ta.EMA(dataframe, timeperiod=21)
         dataframe["ema50"] = ta.EMA(dataframe, timeperiod=50)
+        dataframe["ema200"] = ta.EMA(dataframe, timeperiod=200)
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Entry = crossover event + slow-trend filter + close above ema50.
-        # Requiring close>ema50 at entry avoids firing when crossover happens
-        # during a drawdown that hasn't yet pushed price above slow EMA.
+        # Crossover event + slow-trend + macro-regime (close>ema200).
+        # The ema200 filter is the same one that worked for MeanRevBB — long
+        # trend-followers shouldn't fight multi-day downtrends.
         ema9_cross_up_21 = (dataframe["ema9"] > dataframe["ema21"]) & (
             dataframe["ema9"].shift(1) <= dataframe["ema21"].shift(1)
         )
         slow_trend_up = dataframe["ema21"] > dataframe["ema50"]
-        above_slow = dataframe["close"] > dataframe["ema50"]
+        bull_regime = dataframe["close"] > dataframe["ema200"]
         dataframe.loc[
-            ema9_cross_up_21 & slow_trend_up & above_slow, "enter_long"
+            ema9_cross_up_21 & slow_trend_up & bull_regime, "enter_long"
         ] = 1
         return dataframe
 
