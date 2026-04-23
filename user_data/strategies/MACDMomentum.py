@@ -42,9 +42,9 @@ class MACDMomentum(IStrategy):
     startup_candle_count: int = 210
 
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Brackets: signalperiod 9/12/15 → 12 is optimum (sharpe 0.62,
-        # profit +88%, DD -7%, pf 1.83). 15 too slow (sharpe 0.55, DD -16%).
-        macd = ta.MACD(dataframe, fastperiod=19, slowperiod=39, signalperiod=12)
+        # Fast/slow 16/32 (was 19/39). Bisecting between 12/26 (sharpe 0.32)
+        # and 19/39 (0.62) to test if optimum is at 16 rather than 19.
+        macd = ta.MACD(dataframe, fastperiod=16, slowperiod=32, signalperiod=12)
         dataframe["macd"] = macd["macd"]
         dataframe["macdsignal"] = macd["macdsignal"]
         dataframe["macdhist"] = macd["macdhist"]
