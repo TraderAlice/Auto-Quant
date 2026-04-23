@@ -44,7 +44,7 @@ class VolSqueezeBreak(IStrategy):
             dataframe["bb_upper"] - dataframe["bb_lower"]
         ) / dataframe["bb_middle"]
         dataframe["bb_width_q10"] = (
-            dataframe["bb_width"].rolling(100).quantile(0.1)
+            dataframe["bb_width"].rolling(50).quantile(0.1)
         )
         dataframe["squeezed"] = dataframe["bb_width"] <= dataframe["bb_width_q10"]
         dataframe["vol_sma20"] = dataframe["volume"].rolling(20).mean()
