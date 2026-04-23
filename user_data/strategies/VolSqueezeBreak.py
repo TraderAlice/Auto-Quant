@@ -43,10 +43,10 @@ class VolSqueezeBreak(IStrategy):
         dataframe["bb_width"] = (
             dataframe["bb_upper"] - dataframe["bb_lower"]
         ) / dataframe["bb_middle"]
-        dataframe["bb_width_q20"] = (
-            dataframe["bb_width"].rolling(100).quantile(0.2)
+        dataframe["bb_width_q10"] = (
+            dataframe["bb_width"].rolling(100).quantile(0.1)
         )
-        dataframe["squeezed"] = dataframe["bb_width"] <= dataframe["bb_width_q20"]
+        dataframe["squeezed"] = dataframe["bb_width"] <= dataframe["bb_width_q10"]
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:

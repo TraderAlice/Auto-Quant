@@ -24,7 +24,9 @@ class MeanRevBB(IStrategy):
     can_short = False
 
     minimal_roi = {"0": 100}
-    stoploss = -0.99
+    # 5% hard stop: if close falls this far below entry, the bounce hypothesis
+    # is broken — 2023-25 bull pullbacks went well past 5% on both pairs.
+    stoploss = -0.05
 
     trailing_stop = False
     process_only_new_candles = True
