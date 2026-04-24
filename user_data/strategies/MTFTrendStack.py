@@ -54,7 +54,6 @@ class MTFTrendStack(IStrategy):
         dataframe["ema9"] = ta.EMA(dataframe, timeperiod=9)
         dataframe["ema21"] = ta.EMA(dataframe, timeperiod=21)
         dataframe["rsi"] = ta.RSI(dataframe, timeperiod=14)
-        dataframe["vol_ma20"] = dataframe["volume"].rolling(20).mean()
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
@@ -64,8 +63,7 @@ class MTFTrendStack(IStrategy):
             & (dataframe["atr_4h"] > dataframe["atr_ma20_4h"])  # 4h ATR expansion (conviction)
             & (dataframe["ema9"] > dataframe["ema21"])         # 1h trend up
             & (dataframe["close"] > dataframe["ema9"])         # 1h pullback closed back above
-            & (dataframe["close"].shift(1) < dataframe["ema9"].shift(1))  # event, not state
-            & (dataframe["volume"] > dataframe["vol_ma20"] * 1.2),  # volume expansion
+            & (dataframe["close"].shift(1) < dataframe["ema9"].shift(1)),  # event, not state
             "enter_long",
         ] = 1
         return dataframe

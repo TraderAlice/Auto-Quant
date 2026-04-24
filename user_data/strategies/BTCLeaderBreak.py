@@ -48,6 +48,7 @@ class BTCLeaderBreak(IStrategy):
 
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         dataframe["sma50"] = ta.SMA(dataframe, timeperiod=50)
+        dataframe["vol_ma20"] = dataframe["volume"].rolling(20).mean()
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
@@ -62,7 +63,8 @@ class BTCLeaderBreak(IStrategy):
         dataframe.loc[
             btc_break
             & (dataframe["btc_usdt_atr_4h"] > dataframe["btc_usdt_atr_ma20_4h"])  # BTC vol-expansion conviction
-            & (dataframe["close"] > dataframe["sma50"]),  # local pair not in down-trend
+            & (dataframe["close"] > dataframe["sma50"])                            # local pair not in down-trend
+            & (dataframe["volume"] > dataframe["vol_ma20"] * 1.2),                 # local pair volume confirmation
             "enter_long",
         ] = 1
         return dataframe
