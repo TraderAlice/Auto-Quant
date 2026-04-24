@@ -61,9 +61,8 @@ class MTFTrendStack(IStrategy):
             (dataframe["close"] > dataframe["ema200_1d"])      # 1d bull regime
             & (dataframe["ema_fast_4h"] > dataframe["ema_slow_4h"])   # 4h trend up (13/34)
             & (dataframe["atr_4h"] > dataframe["atr_ma20_4h"])  # 4h ATR expansion (conviction)
-            & (dataframe["ema9"] > dataframe["ema21"])         # 1h trend up
             & (dataframe["close"] > dataframe["ema9"])         # 1h pullback closed back above
-            & (dataframe["close"].shift(1) < dataframe["ema9"].shift(1)),  # event, not state
+            & (dataframe["close"].shift(1) < dataframe["ema9"].shift(1)),  # event-only (dropped redundant ema9>ema21 state)
             "enter_long",
         ] = 1
         return dataframe
