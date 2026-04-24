@@ -15,7 +15,6 @@ Uses MTF: no
 
 from pandas import DataFrame
 import talib.abstract as ta
-import qtpylib.indicators as qtpylib  # noqa: F401
 
 from freqtrade.strategy import IStrategy
 
