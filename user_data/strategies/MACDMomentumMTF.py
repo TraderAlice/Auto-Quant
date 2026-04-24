@@ -50,8 +50,7 @@ class MACDMomentumMTF(IStrategy):
         return dataframe
 
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Faster MACD parameters (8/17/9) to catch crypto-1h moves earlier vs default 12/26/9
-        macd = ta.MACD(dataframe, fastperiod=8, slowperiod=17, signalperiod=9)
+        macd = ta.MACD(dataframe, fastperiod=12, slowperiod=26, signalperiod=9)
         dataframe["macd"] = macd["macd"]
         dataframe["macd_signal"] = macd["macdsignal"]
         dataframe["rsi"] = ta.RSI(dataframe, timeperiod=14)

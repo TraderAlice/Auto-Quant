@@ -51,8 +51,9 @@ class MTFTrendStack(IStrategy):
         return dataframe
 
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        dataframe["ema9"] = ta.EMA(dataframe, timeperiod=9)
-        dataframe["ema21"] = ta.EMA(dataframe, timeperiod=21)
+        # Faster EMA pair (5/13) to catch 1h trend pullbacks earlier vs prior 9/21
+        dataframe["ema_fast"] = ta.EMA(dataframe, timeperiod=5)
+        dataframe["ema_slow"] = ta.EMA(dataframe, timeperiod=13)
         dataframe["rsi"] = ta.RSI(dataframe, timeperiod=14)
         return dataframe
 
@@ -61,16 +62,16 @@ class MTFTrendStack(IStrategy):
             (dataframe["close"] > dataframe["ema200_1d"])      # 1d bull regime
             & (dataframe["ema9_4h"] > dataframe["ema21_4h"])   # 4h trend up
             & (dataframe["atr_4h"] > dataframe["atr_ma20_4h"])  # 4h ATR expansion (conviction)
-            & (dataframe["ema9"] > dataframe["ema21"])         # 1h trend up
-            & (dataframe["close"] > dataframe["ema9"])         # 1h pullback closed back above
-            & (dataframe["close"].shift(1) < dataframe["ema9"].shift(1)),  # event, not state
+            & (dataframe["ema_fast"] > dataframe["ema_slow"])         # 1h trend up
+            & (dataframe["close"] > dataframe["ema_fast"])         # 1h pullback closed back above
+            & (dataframe["close"].shift(1) < dataframe["ema_fast"].shift(1)),  # event, not state
             "enter_long",
         ] = 1
         return dataframe
 
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         dataframe.loc[
-            (dataframe["ema9"] < dataframe["ema21"])           # 1h trend break
+            (dataframe["ema_fast"] < dataframe["ema_slow"])    # 1h trend break
             | (dataframe["close"] < dataframe["ema200_1d"]),   # regime break
             "exit_long",
         ] = 1
