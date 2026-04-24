@@ -1,13 +1,14 @@
 """
-MeanRevBBClean — shallow BB touch + volume expansion + 1d bull regime
+MeanRevBBClean — shallow BB touch + vol-expansion + 1d local bull + cross-pair BTC strength
 
 Paradigm: mean-reversion
-Hypothesis: r1 added 1d EMA200 regime gate but pf dropped (0.76→0.62) — deep
-            "close-below-then-bounce-above" entry catches violent rejections,
-            not soft pullbacks. v0.2.0 r67 finding: "shallow BB touches ARE the
-            edge" — i.e. wick penetrates band but close stays above (test of
-            support, not break of support). Add volume-expansion confirmation
-            (v0.2.0's universal lesson — works across all 3 paradigms there).
+Hypothesis: r2 fixed 4 of 5 pairs but ETH still has pf 0.42. Theory: alt
+            mean-reversion (and even ETH which behaves like an alt vs BTC)
+            requires BTC itself to be strong; otherwise the "bounce" is a
+            short-lived bull-trap inside a broader BTC weakness episode.
+            Add cross-pair gate: BTC daily close > BTC daily EMA200. This is
+            the v0.3.0-native cross-pair affordance — couldn't be expressed
+            in v0.1.0 or v0.2.0.
 Parent: root (paradigm-inspired by v0.2.0's MeanRevBB)
 Created: ba0dd4a
 Status: active
@@ -42,6 +43,14 @@ class MeanRevBBClean(IStrategy):
         dataframe["ema200"] = ta.EMA(dataframe, timeperiod=200)
         return dataframe
 
+    @informative("1d", "BTC/USDT")
+    def populate_indicators_btc_1d(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+        # BTC daily EMA200 — used as cross-pair "macro strength" gate.
+        # On the BTC pair this is redundant with the local ema200_1d (same data),
+        # but the gate condition stays consistent so it doesn't break BTC.
+        dataframe["ema200"] = ta.EMA(dataframe, timeperiod=200)
+        return dataframe
+
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         upperband, middleband, lowerband = ta.BBANDS(
             dataframe["close"], timeperiod=20, nbdevup=2.0, nbdevdn=2.0, matype=0
@@ -60,7 +69,8 @@ class MeanRevBBClean(IStrategy):
             & (dataframe["close"] > dataframe["bb_lower"])
             & (dataframe["rsi"] < 35)
             & (dataframe["volume"] > dataframe["vol_ma20"] * 1.2)  # volume expansion
-            & (dataframe["close"] > dataframe["ema200_1d"]),       # 1d bull regime
+            & (dataframe["close"] > dataframe["ema200_1d"])        # local 1d bull
+            & (dataframe["btc_usdt_close_1d"] > dataframe["btc_usdt_ema200_1d"]),  # BTC macro strength
             "enter_long",
         ] = 1
         return dataframe
