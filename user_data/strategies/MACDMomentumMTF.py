@@ -54,6 +54,7 @@ class MACDMomentumMTF(IStrategy):
         dataframe["macd"] = macd["macd"]
         dataframe["macd_signal"] = macd["macdsignal"]
         dataframe["rsi"] = ta.RSI(dataframe, timeperiod=14)
+        dataframe["vol_ma20"] = dataframe["volume"].rolling(20).mean()
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
@@ -63,7 +64,8 @@ class MACDMomentumMTF(IStrategy):
             & (dataframe["macd"] > 0)                                            # MACD in positive territory (fast EMA > slow EMA)
             & (dataframe["close"] > dataframe["ema200_1d"])                      # 1d bull regime
             & (dataframe["atr_4h"] > dataframe["atr_ma20_4h"])                   # 4h ATR expansion
-            & (dataframe["rsi"] < 75),                                           # not yet overbought
+            & (dataframe["rsi"] < 75)                                            # not yet overbought
+            & (dataframe["volume"] > dataframe["vol_ma20"] * 1.2),               # volume expansion
             "enter_long",
         ] = 1
         return dataframe
