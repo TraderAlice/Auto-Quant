@@ -60,7 +60,7 @@ class BTCLeaderBreakX(IStrategy):
         )
         dataframe.loc[
             btc_break
-            & (dataframe["btc_usdt_atr_4h"] > dataframe["btc_usdt_atr_ma20_4h"] * 1.2)
+            & (dataframe["btc_usdt_atr_4h"] > dataframe["btc_usdt_atr_ma20_4h"])
             & (dataframe["close"] > dataframe["sma50"])              # entry guard kept on slower SMA
             & (dataframe["volume"] > dataframe["vol_ma20"] * 1.5),
             "enter_long",
