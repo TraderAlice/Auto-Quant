@@ -7,22 +7,41 @@ Hypothesis: <what you believe about this asset that this strategy tests. Be spec
 Parent: <another strategy name, or "root" for hypotheses-from-scratch>
 Created: <git commit hash where first introduced — fill in after first commit>
 Status: active
+Uses MTF: <yes | no — declare whether this strategy uses @informative decorators>
 
 This file is a skeleton reference. To create a new strategy:
   1. Copy this file to `user_data/strategies/<YourName>.py`
   2. Rename the class to `<YourName>` (must match filename)
   3. Fill in the docstring fields above
   4. Implement populate_indicators / populate_entry_trend / populate_exit_trend
-  5. Remove this block of instructional text
+  5. Optionally keep the @informative methods (for multi-timeframe) or delete them
+  6. Remove this block of instructional text
 
 File names starting with `_` are ignored by run.py — that's how this
 template stays excluded from backtests.
+
+========================================================================
+MULTI-TIMEFRAME USAGE (v0.3.0)
+========================================================================
+
+Data is pre-downloaded for three timeframes: 1h (base), 4h, and 1d.
+To use higher-TF data from a 1h-based strategy, decorate a method with
+@informative('4h') or @informative('1d'). FreqTrade will:
+  1. Compute the indicators inside your decorated method on the 4h/1d data
+  2. Automatically merge them into the main 1h dataframe
+  3. Prefix the merged columns with the timeframe suffix (e.g., 'rsi' becomes 'rsi_4h')
+  4. Forward-fill to align rows
+  5. Shift by 1 period to prevent look-ahead bias
+
+Only 1h, 4h, and 1d are available — requesting other timeframes will fail
+because the data isn't downloaded. If your strategy doesn't need MTF, just
+delete the @informative methods and ignore this section.
 """
 
 from pandas import DataFrame
 import talib.abstract as ta  # noqa: F401  — available if you want it
 
-from freqtrade.strategy import IStrategy
+from freqtrade.strategy import IStrategy, informative
 
 
 class _Template(IStrategy):
@@ -46,20 +65,50 @@ class _Template(IStrategy):
     ignore_roi_if_entry_signal = False
 
     # Bump this up if your indicators need a longer history to warm up.
+    # When using @informative, include warmup for the slowest indicator across
+    # all timeframes (e.g., SMA200 on 1d needs 200 daily bars).
     startup_candle_count: int = 30
+
+    # ---- OPTIONAL: multi-timeframe via @informative ----
+    # Delete these methods if your strategy is pure 1h.
+    # Keep and modify them if you want higher-TF context.
+
+    @informative("4h")
+    def populate_indicators_4h(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+        # These run on 4h data. Columns you add here will appear in the main
+        # 1h dataframe with `_4h` suffix (e.g., `dataframe['rsi']` below becomes
+        # `dataframe['rsi_4h']` accessible from populate_indicators).
+        # dataframe["rsi"] = ta.RSI(dataframe, timeperiod=14)
+        # dataframe["ema50"] = ta.EMA(dataframe, timeperiod=50)
+        return dataframe
+
+    @informative("1d")
+    def populate_indicators_1d(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+        # These run on 1d data. Access as `rsi_1d`, `ema50_1d`, etc. from 1h populate.
+        # Typical use: regime / macro trend filter. SMA200 on 1d = "above 200-day".
+        # dataframe["ema200"] = ta.EMA(dataframe, timeperiod=200)
+        return dataframe
 
     # ---- three methods every strategy must implement ----
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+        # Main 1h indicators.
+        # If you kept the @informative methods above, the merged columns
+        # `rsi_4h`, `ema50_4h`, `ema200_1d`, etc. are automatically available here.
+        #
         # Example:
         # dataframe["rsi"] = ta.RSI(dataframe, timeperiod=14)
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Example:
-        # dataframe.loc[dataframe["rsi"] < 20, "enter_long"] = 1
+        # Example single-TF: dataframe.loc[dataframe["rsi"] < 20, "enter_long"] = 1
+        # Example MTF confluence:
+        # dataframe.loc[
+        #     (dataframe["rsi"] < 20) &                       # 1h oversold
+        #     (dataframe["close"] > dataframe["ema200_1d"]),  # 1d bull regime
+        #     "enter_long",
+        # ] = 1
         return dataframe
 
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Example:
-        # dataframe.loc[dataframe["rsi"] > 75, "exit_long"] = 1
+        # Example: dataframe.loc[dataframe["rsi"] > 75, "exit_long"] = 1
         return dataframe

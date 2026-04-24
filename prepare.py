@@ -1,7 +1,11 @@
 """
 prepare.py — READ-ONLY. Part of the evaluation contract, do not modify.
 
-One-time setup: check env + download BTC/USDT and ETH/USDT 1h OHLCV from Binance.
+One-time setup: check env + download BTC/USDT and ETH/USDT OHLCV data from
+Binance across all enabled timeframes (1h base + 4h + 1d informative).
+
+The multi-timeframe data is what lets strategies use FreqTrade's @informative
+decorator to reference higher-TF context from inside a 1h base strategy.
 
 Usage:
     uv run prepare.py
@@ -38,16 +42,19 @@ CONFIG = PROJECT_DIR / "config.json"
 
 EXCHANGE = "binance"
 PAIRS = ["BTC/USDT", "ETH/USDT"]
-TIMEFRAMES = ["1h"]
+TIMEFRAMES = ["1h", "4h", "1d"]
 TIMERANGE = "20230101-20251231"
 
 
 def data_exists() -> bool:
-    data_dir = USER_DATA / "data" / EXCHANGE
+    # With our explicit `datadir=user_data/data`, files land flat
+    # (no `binance/` subdir). Check every (pair, timeframe) combination.
+    data_dir = USER_DATA / "data"
     for pair in PAIRS:
-        filename = f"{pair.replace('/', '_')}-1h.feather"
-        if not (data_dir / filename).exists():
-            return False
+        pair_name = pair.replace("/", "_")
+        for tf in TIMEFRAMES:
+            if not (data_dir / f"{pair_name}-{tf}.feather").exists():
+                return False
     return True
 
 
@@ -73,8 +80,9 @@ def download() -> None:
 
 
 def main() -> None:
+    data_dir = USER_DATA / "data"
     if data_exists():
-        print(f"Data already present at {USER_DATA / 'data' / EXCHANGE}")
+        print(f"Data already present at {data_dir} ({len(PAIRS)} pairs × {len(TIMEFRAMES)} timeframes).")
         print("Ready.")
         return
 
@@ -82,7 +90,7 @@ def main() -> None:
     print(f"Pairs:      {PAIRS}")
     print(f"Timeframes: {TIMEFRAMES}")
     print(f"Timerange:  {TIMERANGE}")
-    print(f"Dest:       {USER_DATA / 'data' / EXCHANGE}")
+    print(f"Dest:       {data_dir}")
     print()
 
     download()
@@ -90,7 +98,7 @@ def main() -> None:
     if not data_exists():
         print(
             "ERROR: download appeared to succeed but expected files are missing.\n"
-            f"Check {USER_DATA / 'data' / EXCHANGE}/",
+            f"Check {data_dir}/",
             file=sys.stderr,
         )
         sys.exit(1)
