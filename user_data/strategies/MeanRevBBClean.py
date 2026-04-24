@@ -1,12 +1,13 @@
 """
-MeanRevBBClean — BB-bounce mean-reversion gated by 1d EMA200 bull regime
+MeanRevBBClean — shallow BB touch + volume expansion + 1d bull regime
 
 Paradigm: mean-reversion
-Hypothesis: Round 0 raw BB-bounce was -1.20 across all 5 pairs (catching falling
-            knives in down-legs). v0.2.0 r2 found the fix: only mean-revert when
-            1d close > EMA200 (bull regime). Apply it here on the broader 5-pair
-            universe — expect the high-WR-but-pf<1 problem to flip to high-WR-
-            and-pf>1 once we stop catching trend-down rejections.
+Hypothesis: r1 added 1d EMA200 regime gate but pf dropped (0.76→0.62) — deep
+            "close-below-then-bounce-above" entry catches violent rejections,
+            not soft pullbacks. v0.2.0 r67 finding: "shallow BB touches ARE the
+            edge" — i.e. wick penetrates band but close stays above (test of
+            support, not break of support). Add volume-expansion confirmation
+            (v0.2.0's universal lesson — works across all 3 paradigms there).
 Parent: root (paradigm-inspired by v0.2.0's MeanRevBB)
 Created: ba0dd4a
 Status: active
@@ -49,14 +50,17 @@ class MeanRevBBClean(IStrategy):
         dataframe["bb_middle"] = middleband
         dataframe["bb_lower"] = lowerband
         dataframe["rsi"] = ta.RSI(dataframe, timeperiod=14)
+        dataframe["vol_ma20"] = dataframe["volume"].rolling(20).mean()
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         dataframe.loc[
-            (dataframe["close"].shift(1) < dataframe["bb_lower"].shift(1))
+            # Shallow touch: wick penetrated lower band, body stayed above
+            (dataframe["low"] <= dataframe["bb_lower"])
             & (dataframe["close"] > dataframe["bb_lower"])
             & (dataframe["rsi"] < 35)
-            & (dataframe["close"] > dataframe["ema200_1d"]),  # 1d bull regime gate
+            & (dataframe["volume"] > dataframe["vol_ma20"] * 1.2)  # volume expansion
+            & (dataframe["close"] > dataframe["ema200_1d"]),       # 1d bull regime
             "enter_long",
         ] = 1
         return dataframe
