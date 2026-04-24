@@ -53,6 +53,7 @@ class MTFTrendStack(IStrategy):
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         dataframe["ema9"] = ta.EMA(dataframe, timeperiod=9)
         dataframe["ema21"] = ta.EMA(dataframe, timeperiod=21)
+        dataframe["sma50"] = ta.SMA(dataframe, timeperiod=50)
         dataframe["rsi"] = ta.RSI(dataframe, timeperiod=14)
         return dataframe
 
@@ -68,8 +69,9 @@ class MTFTrendStack(IStrategy):
         return dataframe
 
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+        # Test slower exit on trend (parallel to BTCLeaderBreakX/VolBBSqueeze finding that patient SMA50 wins for "ride the move" paradigms)
         dataframe.loc[
-            (dataframe["ema9"] < dataframe["ema21"])           # 1h trend break
+            (dataframe["close"] < dataframe["sma50"])          # 1h SMA50 break (slower than EMA9 cross)
             | (dataframe["close"] < dataframe["ema200_1d"]),   # regime break
             "exit_long",
         ] = 1
