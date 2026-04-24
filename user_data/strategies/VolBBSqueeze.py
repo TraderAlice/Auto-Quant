@@ -57,19 +57,19 @@ class VolBBSqueeze(IStrategy):
         return dataframe
 
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Local 1h SMA for exit reference (slower, lets winners ride)
         dataframe["sma50"] = ta.SMA(dataframe, timeperiod=50)
+        dataframe["vol_ma20"] = dataframe["volume"].rolling(20).mean()
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Squeeze-then-break event on 4h: prior bar was in squeeze, current bar broke upper
         squeeze_then_break = (
             (dataframe["bb_width_4h"].shift(1) <= dataframe["bb_width_q25_4h"].shift(1))  # was squeezed
             & (dataframe["close_4h"] > dataframe["bb_upper_4h"])                          # now breaking upper
         )
         dataframe.loc[
             squeeze_then_break
-            & (dataframe["close"] > dataframe["ema200_1d"]),  # 1d bull regime
+            & (dataframe["close"] > dataframe["ema200_1d"])                # 1d bull regime
+            & (dataframe["volume"] > dataframe["vol_ma20"] * 1.2),         # local volume confirmation
             "enter_long",
         ] = 1
         return dataframe
