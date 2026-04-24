@@ -68,9 +68,9 @@ class BTCLeaderBreakX(IStrategy):
         return dataframe
 
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Faster exit: SMA20 (was 50 in parent)
+        # Restore SMA50 exit to isolate whether it was the entry or the exit that hurt
         dataframe.loc[
-            dataframe["close"] < dataframe["sma20"],
+            dataframe["close"] < dataframe["sma50"],
             "exit_long",
         ] = 1
         return dataframe
