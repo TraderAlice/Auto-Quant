@@ -41,7 +41,7 @@ class VolBBSqueeze(IStrategy):
     @informative("4h")
     def populate_indicators_4h(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         upper, middle, lower = ta.BBANDS(
-            dataframe["close"], timeperiod=20, nbdevup=2.0, nbdevdn=2.0, matype=0
+            dataframe["close"], timeperiod=15, nbdevup=2.0, nbdevdn=2.0, matype=0
         )
         dataframe["bb_upper"] = upper
         dataframe["bb_middle"] = middle
