@@ -60,6 +60,7 @@ class MACDMomentumMTF(IStrategy):
         dataframe.loc[
             (dataframe["macd"] > dataframe["macd_signal"])                       # MACD above signal
             & (dataframe["macd"].shift(1) <= dataframe["macd_signal"].shift(1))  # cross-up event
+            & (dataframe["macd"] > 0)                                            # MACD in positive territory (fast EMA > slow EMA)
             & (dataframe["close"] > dataframe["ema200_1d"])                      # 1d bull regime
             & (dataframe["atr_4h"] > dataframe["atr_ma20_4h"])                   # 4h ATR expansion
             & (dataframe["rsi"] < 75),                                           # not yet overbought
