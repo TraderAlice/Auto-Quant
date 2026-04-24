@@ -47,8 +47,7 @@ class MTFTrendStack(IStrategy):
 
     @informative("1d")
     def populate_indicators_1d(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Faster regime filter (EMA100 vs prior EMA200) — more entries during corrections
-        dataframe["ema100"] = ta.EMA(dataframe, timeperiod=100)
+        dataframe["ema200"] = ta.EMA(dataframe, timeperiod=200)
         return dataframe
 
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
@@ -59,7 +58,7 @@ class MTFTrendStack(IStrategy):
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         dataframe.loc[
-            (dataframe["close"] > dataframe["ema100_1d"])      # 1d bull regime
+            (dataframe["close"] > dataframe["ema200_1d"])      # 1d bull regime
             & (dataframe["ema_fast_4h"] > dataframe["ema_slow_4h"])   # 4h trend up (13/34)
             & (dataframe["atr_4h"] > dataframe["atr_ma20_4h"])  # 4h ATR expansion (conviction)
             & (dataframe["close"] > dataframe["ema9"])         # 1h pullback closed back above
@@ -71,7 +70,7 @@ class MTFTrendStack(IStrategy):
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         dataframe.loc[
             (dataframe["ema9"] < dataframe["ema21"])           # 1h trend break
-            | (dataframe["close"] < dataframe["ema100_1d"]),   # regime break
+            | (dataframe["close"] < dataframe["ema200_1d"]),   # regime break
             "exit_long",
         ] = 1
         return dataframe

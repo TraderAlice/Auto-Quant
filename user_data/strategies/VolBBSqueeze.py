@@ -64,7 +64,7 @@ class VolBBSqueeze(IStrategy):
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         squeeze_then_break = (
             (dataframe["bb_width_4h"].shift(1) <= dataframe["bb_width_q33_4h"].shift(1))  # was squeezed
-            & (dataframe["close_4h"] > dataframe["bb_middle_4h"])                         # now closing above middle (looser than upper-band break)
+            & (dataframe["close_4h"] > dataframe["bb_upper_4h"])                          # now breaking upper band
         )
         dataframe.loc[
             squeeze_then_break
