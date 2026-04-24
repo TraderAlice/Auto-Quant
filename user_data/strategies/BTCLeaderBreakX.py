@@ -39,8 +39,8 @@ class BTCLeaderBreakX(IStrategy):
 
     @informative("4h", "BTC/USDT")
     def populate_indicators_btc_4h(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Donchian-13 (push tighter beyond r14's 15)
-        dataframe["dc_high13"] = dataframe["high"].rolling(13).max()
+        # Donchian-10 (push tighter beyond r26's 13)
+        dataframe["dc_high10"] = dataframe["high"].rolling(10).max()
         dataframe["atr"] = ta.ATR(dataframe, timeperiod=14)
         dataframe["atr_ma20"] = dataframe["atr"].rolling(20).mean()
         return dataframe
@@ -54,9 +54,9 @@ class BTCLeaderBreakX(IStrategy):
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         btc_break = (
-            dataframe["btc_usdt_close_4h"] > dataframe["btc_usdt_dc_high13_4h"].shift(1)
+            dataframe["btc_usdt_close_4h"] > dataframe["btc_usdt_dc_high10_4h"].shift(1)
         ) & (
-            dataframe["btc_usdt_close_4h"].shift(1) <= dataframe["btc_usdt_dc_high13_4h"].shift(1)
+            dataframe["btc_usdt_close_4h"].shift(1) <= dataframe["btc_usdt_dc_high10_4h"].shift(1)
         )
         dataframe.loc[
             btc_break
