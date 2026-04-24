@@ -1,22 +1,22 @@
 """
-MeanRevBBClean — pure 1h Bollinger-bounce mean-reversion (single-TF baseline)
+MeanRevBBClean — BB-bounce mean-reversion gated by 1d EMA200 bull regime
 
 Paradigm: mean-reversion
-Hypothesis: Pure 1h BB-lower bounce was v0.2.0's MeanRevBB strongest config
-            (Sharpe 0.52). Re-running the paradigm without MTF on the new 5-pair
-            universe lets us see per-pair MR behaviour as a clean signal — does
-            the BB-bounce edge transfer to SOL/BNB/AVAX, or is it BTC/ETH only?
-            This serves as a single-TF control against the two MTF strategies.
+Hypothesis: Round 0 raw BB-bounce was -1.20 across all 5 pairs (catching falling
+            knives in down-legs). v0.2.0 r2 found the fix: only mean-revert when
+            1d close > EMA200 (bull regime). Apply it here on the broader 5-pair
+            universe — expect the high-WR-but-pf<1 problem to flip to high-WR-
+            and-pf>1 once we stop catching trend-down rejections.
 Parent: root (paradigm-inspired by v0.2.0's MeanRevBB)
-Created: pending — fill in after first commit
+Created: ba0dd4a
 Status: active
-Uses MTF: no
+Uses MTF: yes
 """
 
 from pandas import DataFrame
 import talib.abstract as ta
 
-from freqtrade.strategy import IStrategy
+from freqtrade.strategy import IStrategy, informative
 
 
 class MeanRevBBClean(IStrategy):
@@ -33,10 +33,15 @@ class MeanRevBBClean(IStrategy):
     exit_profit_only = False
     ignore_roi_if_entry_signal = False
 
-    startup_candle_count: int = 50
+    # 1d EMA200 needs ~200 daily bars warmup
+    startup_candle_count: int = 250
+
+    @informative("1d")
+    def populate_indicators_1d(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+        dataframe["ema200"] = ta.EMA(dataframe, timeperiod=200)
+        return dataframe
 
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Bollinger Bands via talib (period=20, 2 stddev)
         upperband, middleband, lowerband = ta.BBANDS(
             dataframe["close"], timeperiod=20, nbdevup=2.0, nbdevdn=2.0, matype=0
         )
@@ -47,17 +52,16 @@ class MeanRevBBClean(IStrategy):
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Bounce event: prior bar closed below lower band, current bar closed back above it
         dataframe.loc[
             (dataframe["close"].shift(1) < dataframe["bb_lower"].shift(1))
             & (dataframe["close"] > dataframe["bb_lower"])
-            & (dataframe["rsi"] < 35),
+            & (dataframe["rsi"] < 35)
+            & (dataframe["close"] > dataframe["ema200_1d"]),  # 1d bull regime gate
             "enter_long",
         ] = 1
         return dataframe
 
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Exit on revert to mid-band OR overbought
         dataframe.loc[
             (dataframe["close"] > dataframe["bb_middle"])
             | (dataframe["rsi"] > 65),
