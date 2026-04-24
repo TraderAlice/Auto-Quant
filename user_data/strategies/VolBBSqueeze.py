@@ -48,8 +48,8 @@ class VolBBSqueeze(IStrategy):
         dataframe["bb_lower"] = lower
         # BB width relative to its own 50-bar history — squeeze when width is in bottom quartile
         dataframe["bb_width"] = (upper - lower) / middle
-        # Tighter squeeze (q20) - test push beyond q33 toward more strict squeeze definition
-        dataframe["bb_width_q33"] = dataframe["bb_width"].rolling(50).quantile(0.20)
+        # q33 squeeze threshold (peak via r23 / r32 — tighter q20 hurts compounding, looser q50 over-trades)
+        dataframe["bb_width_q33"] = dataframe["bb_width"].rolling(50).quantile(0.33)
         return dataframe
 
     @informative("1d")
