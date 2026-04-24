@@ -37,3 +37,4 @@ rubber-stamp.
 |---|---|---|---|---|---|
 | [0.1.0](0.1.0/) | 2026-04-22 | BTC/USDT + ETH/USDT @ 1h | 99 | 1.44 (true edge: 0.19) | Pattern validated; agent self-reversed Goodhart exploits |
 | [0.2.0](0.2.0/) | 2026-04-23 | BTC/USDT + ETH/USDT @ 1h | 81 | 0.67 (clean, no gaming) | Multi-strategy architecture: 5 paradigms tested / 3 kept / zero Goodhart / 3.5× better true-edge than v0.1.0 |
+| [0.3.0](0.3.0/) | 2026-04-24 | 5-pair crypto @ 1h+4h+1d | 39 | **1.07** (clean, no gaming) | MTF + 5-pair + per-pair reporting; first project-wide clean Sharpe > 1; first fork event with isolation experiment; cross-pair volume asymmetry + patient-exit paradigm asymmetry findings |
