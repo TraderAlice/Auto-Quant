@@ -40,6 +40,9 @@ class MTFTrendStack(IStrategy):
     def populate_indicators_4h(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         dataframe["ema9"] = ta.EMA(dataframe, timeperiod=9)
         dataframe["ema21"] = ta.EMA(dataframe, timeperiod=21)
+        # ATR expansion gate (v0.2.0 r28: helps trend, hurts MR)
+        dataframe["atr"] = ta.ATR(dataframe, timeperiod=14)
+        dataframe["atr_ma20"] = dataframe["atr"].rolling(20).mean()
         return dataframe
 
     @informative("1d")
@@ -57,6 +60,7 @@ class MTFTrendStack(IStrategy):
         dataframe.loc[
             (dataframe["close"] > dataframe["ema200_1d"])      # 1d bull regime
             & (dataframe["ema9_4h"] > dataframe["ema21_4h"])   # 4h trend up
+            & (dataframe["atr_4h"] > dataframe["atr_ma20_4h"])  # 4h ATR expansion (conviction)
             & (dataframe["ema9"] > dataframe["ema21"])         # 1h trend up
             & (dataframe["close"] > dataframe["ema9"])         # 1h pullback closed back above
             & (dataframe["close"].shift(1) < dataframe["ema9"].shift(1)),  # event, not state
