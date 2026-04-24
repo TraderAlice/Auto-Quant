@@ -41,8 +41,9 @@ class BTCLeaderBreak(IStrategy):
     def populate_indicators_btc_4h(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         # Donchian-20 high on 4h BTC (excluding the current bar via shift in entry)
         dataframe["dc_high20"] = dataframe["high"].rolling(20).max()
-        # BTC 4h SMA50 — trend confirmation gate to suppress break-from-chop
-        dataframe["sma50"] = ta.SMA(dataframe, timeperiod=50)
+        # ATR-expansion gate: only count BTC breaks that come with vol-expansion conviction
+        dataframe["atr"] = ta.ATR(dataframe, timeperiod=14)
+        dataframe["atr_ma20"] = dataframe["atr"].rolling(20).mean()
         return dataframe
 
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
@@ -60,7 +61,7 @@ class BTCLeaderBreak(IStrategy):
         )
         dataframe.loc[
             btc_break
-            & (dataframe["btc_usdt_close_4h"] > dataframe["btc_usdt_sma50_4h"])  # BTC in 4h uptrend
+            & (dataframe["btc_usdt_atr_4h"] > dataframe["btc_usdt_atr_ma20_4h"])  # BTC vol-expansion conviction
             & (dataframe["close"] > dataframe["sma50"]),  # local pair not in down-trend
             "enter_long",
         ] = 1
