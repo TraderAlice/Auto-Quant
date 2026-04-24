@@ -69,9 +69,8 @@ class MTFTrendStack(IStrategy):
         return dataframe
 
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Test slower exit on trend (parallel to BTCLeaderBreakX/VolBBSqueeze finding that patient SMA50 wins for "ride the move" paradigms)
         dataframe.loc[
-            (dataframe["close"] < dataframe["sma50"])          # 1h SMA50 break (slower than EMA9 cross)
+            (dataframe["ema9"] < dataframe["ema21"])           # 1h trend break (responsive exit — patient exit hurts trend per r36)
             | (dataframe["close"] < dataframe["ema200_1d"]),   # regime break
             "exit_long",
         ] = 1
