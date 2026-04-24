@@ -57,6 +57,16 @@ class VolBBSqueeze(IStrategy):
         dataframe["ema200"] = ta.EMA(dataframe, timeperiod=200)
         return dataframe
 
+    @informative("4h", "BTC/USDT")
+    def populate_indicators_btc_4h(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+        # Cross-pair: BTC's own 4h BB-width — test if BTC-also-squeezed adds info
+        upper, middle, lower = ta.BBANDS(
+            dataframe["close"], timeperiod=20, nbdevup=2.0, nbdevdn=2.0, matype=0
+        )
+        dataframe["bb_width"] = (upper - lower) / middle
+        dataframe["bb_width_q33"] = dataframe["bb_width"].rolling(50).quantile(0.33)
+        return dataframe
+
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         dataframe["sma50"] = ta.SMA(dataframe, timeperiod=50)
         return dataframe
@@ -66,9 +76,14 @@ class VolBBSqueeze(IStrategy):
             (dataframe["bb_width_4h"].shift(1) <= dataframe["bb_width_q33_4h"].shift(1))  # was squeezed
             & (dataframe["close_4h"] > dataframe["bb_upper_4h"])                          # now breaking upper
         )
+        # Cross-pair: BTC also in squeeze on 4h (volatility regime alignment)
+        btc_squeezed = (
+            dataframe["btc_usdt_bb_width_4h"] <= dataframe["btc_usdt_bb_width_q33_4h"]
+        )
         dataframe.loc[
             squeeze_then_break
-            & (dataframe["close"] > dataframe["ema200_1d"]),  # 1d bull regime
+            & (dataframe["close"] > dataframe["ema200_1d"])  # 1d bull regime
+            & btc_squeezed,                                   # BTC also in 4h squeeze
             "enter_long",
         ] = 1
         return dataframe
