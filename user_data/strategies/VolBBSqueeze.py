@@ -57,8 +57,8 @@ class VolBBSqueeze(IStrategy):
         return dataframe
 
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Local 1h SMA for exit reference
-        dataframe["sma20"] = ta.SMA(dataframe, timeperiod=20)
+        # Local 1h SMA for exit reference (slower, lets winners ride)
+        dataframe["sma50"] = ta.SMA(dataframe, timeperiod=50)
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
@@ -76,7 +76,7 @@ class VolBBSqueeze(IStrategy):
 
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         dataframe.loc[
-            dataframe["close"] < dataframe["sma20"],  # 1h trend break
+            dataframe["close"] < dataframe["sma50"],  # 1h trend break — patient exit
             "exit_long",
         ] = 1
         return dataframe
