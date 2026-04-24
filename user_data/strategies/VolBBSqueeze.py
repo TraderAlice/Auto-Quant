@@ -48,7 +48,8 @@ class VolBBSqueeze(IStrategy):
         dataframe["bb_lower"] = lower
         # BB width relative to its own 50-bar history — squeeze when width is in bottom quartile
         dataframe["bb_width"] = (upper - lower) / middle
-        dataframe["bb_width_q25"] = dataframe["bb_width"].rolling(50).quantile(0.25)
+        # Wider squeeze threshold (q33 vs prior q25) — captures more squeeze events
+        dataframe["bb_width_q33"] = dataframe["bb_width"].rolling(50).quantile(0.33)
         return dataframe
 
     @informative("1d")
@@ -62,7 +63,7 @@ class VolBBSqueeze(IStrategy):
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         squeeze_then_break = (
-            (dataframe["bb_width_4h"].shift(1) <= dataframe["bb_width_q25_4h"].shift(1))  # was squeezed
+            (dataframe["bb_width_4h"].shift(1) <= dataframe["bb_width_q33_4h"].shift(1))  # was squeezed
             & (dataframe["close_4h"] > dataframe["bb_upper_4h"])                          # now breaking upper
         )
         dataframe.loc[
