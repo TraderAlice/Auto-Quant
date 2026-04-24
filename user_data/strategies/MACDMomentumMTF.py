@@ -50,10 +50,10 @@ class MACDMomentumMTF(IStrategy):
         return dataframe
 
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        macd = ta.MACD(dataframe, fastperiod=12, slowperiod=26, signalperiod=9)
+        # Faster MACD parameters (8/17/9) to catch crypto-1h moves earlier vs default 12/26/9
+        macd = ta.MACD(dataframe, fastperiod=8, slowperiod=17, signalperiod=9)
         dataframe["macd"] = macd["macd"]
         dataframe["macd_signal"] = macd["macdsignal"]
-        dataframe["macd_ma20"] = dataframe["macd"].rolling(20).mean()
         dataframe["rsi"] = ta.RSI(dataframe, timeperiod=14)
         return dataframe
 
@@ -62,7 +62,6 @@ class MACDMomentumMTF(IStrategy):
             (dataframe["macd"] > dataframe["macd_signal"])                       # MACD above signal
             & (dataframe["macd"].shift(1) <= dataframe["macd_signal"].shift(1))  # cross-up event
             & (dataframe["macd"] > 0)                                            # MACD in positive territory
-            & (dataframe["macd"] > dataframe["macd_ma20"])                       # MACD trending up vs its 20-bar mean
             & (dataframe["close"] > dataframe["ema200_1d"])                      # 1d bull regime
             & (dataframe["atr_4h"] > dataframe["atr_ma20_4h"])                   # 4h ATR expansion
             & (dataframe["rsi"] < 75),                                           # not yet overbought
