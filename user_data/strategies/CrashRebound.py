@@ -79,14 +79,13 @@ class CrashRebound(IStrategy):
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # r6: ADD 1d EMA200 slope-up filter (winter defense). r5 baseline
-        # had bull 0.82/+31% but winter -0.84/-21.8% on 145 trades — winter
-        # bounces too small to outpace continuation drops. Slope-up gates
-        # entries to regimes where the 1d trend is structurally improving;
-        # should silence most of 2022 winter while preserving the bull/
-        # recovery edge.
+        # r8: relax drawdown threshold -25% → -20%. r6+r7 confirmed slope-up
+        # filter is the winter defense; bull edge per-trade was strong (0.35%
+        # avg trade vs 0.28% pre-filter) but trade count was light (34 bull
+        # trades). Loosening the drawdown trigger lets milder pullbacks
+        # qualify; the slope-up filter still gates winter entries.
         dataframe.loc[
-            (dataframe["drawdown_pct"] < -0.25)
+            (dataframe["drawdown_pct"] < -0.20)
             & (dataframe["rsi"] < 35)
             & (dataframe["ema200_slope_up_1d"] == 1),
             "enter_long",

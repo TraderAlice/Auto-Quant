@@ -79,12 +79,13 @@ class MajorsBTCLeader(IStrategy):
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # BTC's 4h close > BTC's 4h Donchian-24 prior high — leader signal.
-        # Plus same-pair 4h trend up (don't fade the pair we're trading).
-        # The cross-pair column is named via BTC's pair: btc_usdt_*.
+        # r8: drop same-pair 4h ema filter (too restrictive — r7 only 17
+        # bull trades / WR 23.5% / 76 full_5y trades; v0.4.0 reproductions
+        # had hundreds). Pure BTC-leader trigger now: BTC's 4h close pierces
+        # its 4h Donchian-24 prior high → all pairs in basket get entry.
         dataframe.loc[
-            (dataframe["close"] > dataframe["btc_usdt_donchian_high_24_4h"])
-            & (dataframe["ema50_4h"] > dataframe["ema200_4h"]),
+            dataframe["close"].notna()  # keep alignment, no extra filter
+            & (dataframe["close"] > dataframe["btc_usdt_donchian_high_24_4h"]),
             "enter_long",
         ] = 1
         return dataframe
