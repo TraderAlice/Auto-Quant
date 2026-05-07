@@ -98,12 +98,11 @@ class BNBSizedConviction(IStrategy):
         rsi_now = df["rsi"].iloc[-1]
         if rsi_now != rsi_now or rsi_now <= 0:
             return proposed_stake
-        # r13: cap raised 2.0 → 3.0 to test more aggressive sizing.
-        # r9 baseline (2x cap): avg_position 21.98%, full profit +12.46%,
-        # robust 0.098. Wider cap should lift recovery+full where
-        # deeper-RSI entries cluster — testing whether the conviction
-        # signal has more juice at higher leverage.
+        # r16: revert r13's 3x cap to 2x. r13 finding: 3x had ZERO effect
+        # vs 2x — RSI<12.5 (where scale > 2.0) is structurally rare on
+        # BNB so the higher cap was non-binding. The 2x cap is the
+        # effective conviction ceiling for this signal/pair.
         scale = 25.0 / max(float(rsi_now), 5.0)
-        scale = max(0.5, min(3.0, scale))
+        scale = max(0.5, min(2.0, scale))
         stake = proposed_stake * scale
         return max(min_stake or 0.0, min(max_stake, stake))

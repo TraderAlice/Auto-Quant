@@ -103,3 +103,33 @@ class CrashRebound(IStrategy):
         # r15: revert r14 SMA100 → SMA50.
         dataframe.loc[dataframe["close"] > dataframe["sma50"], "exit_long"] = 1
         return dataframe
+
+    def custom_stake_amount(
+        self,
+        pair: str,
+        current_time,
+        current_rate: float,
+        proposed_stake: float,
+        min_stake,
+        max_stake: float,
+        leverage: float,
+        entry_tag: str,
+        side: str,
+        **kwargs,
+    ) -> float:
+        # r16: drawdown-depth conviction sizing. Deeper drawdown at entry
+        # → bigger stake. Symmetric with BNBSizedConviction's RSI-depth
+        # mechanism. scale = clamp(abs(dd)/0.20, 0.5, 2.0). At -20% DD,
+        # scale=1.0 (baseline). At -40%, scale=2.0. Tests whether the
+        # DD-conviction signal redistributes profit favorably across
+        # regimes the way RSI-conviction did for BNB.
+        df, _ = self.dp.get_analyzed_dataframe(pair, self.timeframe)
+        if df.empty or "drawdown_pct" not in df.columns:
+            return proposed_stake
+        dd = df["drawdown_pct"].iloc[-1]
+        if dd != dd or dd >= 0:
+            return proposed_stake
+        scale = abs(float(dd)) / 0.20
+        scale = max(0.5, min(2.0, scale))
+        stake = proposed_stake * scale
+        return max(min_stake or 0.0, min(max_stake, stake))
