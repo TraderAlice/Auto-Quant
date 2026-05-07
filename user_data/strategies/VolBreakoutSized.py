@@ -35,7 +35,12 @@ class VolBreakoutSized(IStrategy):
     can_short = False
 
     minimal_roi = {"0": 100}
-    stoploss = -0.99
+    # r12: stoploss=-0.10. r11's SMA50 exit lifted Sharpe to project-record
+    # 1.122 but DD widened -16%→-20% — patient exit lets losers run too.
+    # Stoploss on breakouts is structurally different from on MR: a failed
+    # breakout IS the signal that the trade is wrong (vs MR where being
+    # underwater is normal). v0.3.0 never tested stoploss on breakouts.
+    stoploss = -0.10
     trailing_stop = False
     process_only_new_candles = True
     use_exit_signal = True
