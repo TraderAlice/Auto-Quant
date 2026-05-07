@@ -76,18 +76,22 @@ class CrashRebound(IStrategy):
         )
         dataframe["rsi"] = ta.RSI(dataframe, timeperiod=14)
         dataframe["sma50"] = ta.SMA(dataframe, timeperiod=50)
+        # r10: volume SMA20 for entry confirmation. Filters low-quality
+        # bounces (capitulation rebounds need volume to be real).
+        dataframe["volume_sma20"] = dataframe["volume"].rolling(20).mean()
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # r8: relax drawdown threshold -25% → -20%. r6+r7 confirmed slope-up
-        # filter is the winter defense; bull edge per-trade was strong (0.35%
-        # avg trade vs 0.28% pre-filter) but trade count was light (34 bull
-        # trades). Loosening the drawdown trigger lets milder pullbacks
-        # qualify; the slope-up filter still gates winter entries.
+        # r10: ADD volume confirmation (volume > 1.3 * SMA20). Real
+        # capitulation bounces have volume; low-volume pseudo-bounces
+        # within sideways drift are likely false positives. Targets
+        # winter (which still has 33 trades netting near-zero) and
+        # recovery noise.
         dataframe.loc[
             (dataframe["drawdown_pct"] < -0.20)
             & (dataframe["rsi"] < 35)
-            & (dataframe["ema200_slope_up_1d"] == 1),
+            & (dataframe["ema200_slope_up_1d"] == 1)
+            & (dataframe["volume"] > 1.3 * dataframe["volume_sma20"]),
             "enter_long",
         ] = 1
         return dataframe
