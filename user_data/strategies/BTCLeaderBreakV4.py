@@ -112,7 +112,10 @@ class BTCLeaderBreakV4(IStrategy):
         atr_pct = df["atr_pct_4h"].iloc[-1]
         if atr_pct != atr_pct or atr_pct <= 0:
             return proposed_stake
-        vol_target = 0.025
+        # r17: vol_target 0.025→0.020 — mirror VolSized's r16 win.
+        # Tighter de-risking lifted Vol's Sharpe 0.033; test if the
+        # same lesson transfers to the leader paradigm.
+        vol_target = 0.020
         scale = min(1.0, vol_target / atr_pct)
         stake = proposed_stake * scale
         return max(min_stake or 0.0, min(max_stake, stake))
