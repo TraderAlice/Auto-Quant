@@ -2,15 +2,16 @@
 ChannelADXTrend — 1d-regime + 4h-ADX/EMA20>50 + 1h EMA50 pullback-and-reclaim
 
 Paradigm: trend-following
-Hypothesis: r1 round-1 result was catastrophic (Sharpe -2.14, 4404 trades,
-            WR 19%, profit -73%) — the EMA20 cross-back entry fires on
-            every wiggle through a fast MA, and ADX>22 + 1d SMA100 alone
-            don't filter the noise. r2 evolution: keep the regime + ADX
-            scaffolding but (a) tighten ADX>25, (b) add a 4h EMA20>EMA50
-            structural-trend gate, and (c) replace the noisy EMA20 cross
-            with a slower "pullback to 1h EMA50 then reclaim" entry. This
-            should cut trade frequency 5-10x and lift WR — the question is
-            whether the surviving trades carry meaningful edge.
+Hypothesis: r1 was catastrophic (Sharpe -2.14, 4404 trades). r2 added
+            slower entry + 4h trend gate, cut trades to 1352 and Sharpe
+            to -0.37 — but WR still 18%, meaning the entry pattern was
+            wrong-side (pullback-and-reclaim catches stop-runs in trends,
+            not buyable dips). r3 pivots: continuation-style entry (close
+            breaks 5-bar high while above 1h EMA50, gated by full MTF
+            trend stack). Trend-following alpha lives in entering WITH
+            momentum, not against it. If r3 doesn't lift WR meaningfully
+            (target >35%) the trend paradigm should be killed and the
+            slot recycled.
 Parent: root (self-evolution; r1 commit 7a58a63 was the catastrophic baseline)
 Created: 7a58a63 (r1)
 Status: active
@@ -56,15 +57,17 @@ class ChannelADXTrend(IStrategy):
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Pullback-and-reclaim: prior bar touched/dipped through 1h EMA50;
-        # current bar closes back above it. Combined with multi-TF trend
-        # confirmation (1d SMA100 regime + 4h ADX>25 + 4h EMA20>EMA50).
+        # r3 pivot: continuation-style entry (NOT pullback). r2 found
+        # WR stuck at 18% with pullback-reclaim — in trending markets
+        # brief EMA50 touches are stop-runs, not buy zones. Now: enter on
+        # 5-bar high break while above EMA50, with full MTF trend gating.
+        dataframe["high_5"] = dataframe["high"].rolling(5).max().shift(1)
         dataframe.loc[
             (dataframe["close"] > dataframe["sma100_1d"])
             & (dataframe["adx_4h"] > 25)
             & (dataframe["ema20_4h"] > dataframe["ema50_4h"])
             & (dataframe["close"] > dataframe["ema50"])
-            & (dataframe["low"].shift(1) <= dataframe["ema50"].shift(1)),
+            & (dataframe["close"] > dataframe["high_5"]),
             "enter_long",
         ] = 1
         return dataframe

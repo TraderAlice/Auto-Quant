@@ -34,7 +34,11 @@ class MeanRevRSIDip(IStrategy):
     can_short = False
 
     minimal_roi = {"0": 100}
-    stoploss = -0.99
+    # r3: hard stoploss to cap 2022 catch-the-knife losses. RSI<28 dip-buys
+    # in deep bear cascades that don't bounce drag DD to -22%; -7% stop
+    # cuts those before they compound. Risk: realizes losses on positions
+    # that would have eventually recovered. Net effect to be measured.
+    stoploss = -0.07
     trailing_stop = False
     process_only_new_candles = True
     use_exit_signal = True
