@@ -49,10 +49,10 @@ class BTCLeaderBreakV4(IStrategy):
 
     @informative("4h", "BTC/USDT")
     def populate_indicators_btc_4h(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # r10: Donchian-8 (10→8). r9's 15→10 lifted Sharpe 0.59→0.69 cleanly;
-        # continue past v0.3.0's terminal 10 to test if the channel-tightening
-        # trend keeps paying out, or if 10 was a true local optimum.
-        dataframe["donchian_high_8"] = dataframe["high"].rolling(8).max().shift(1)
+        # r11: Donchian-10 (revert from 8). r10 confirmed 10 IS the local
+        # optimum across both bull-only (v0.3.0) AND regime-mixed (v0.4.0)
+        # data. Cross-regime parameter robustness on this knob.
+        dataframe["donchian_high_10"] = dataframe["high"].rolling(10).max().shift(1)
         dataframe["ema50"] = ta.EMA(dataframe, timeperiod=50)
         dataframe["ema200"] = ta.EMA(dataframe, timeperiod=200)
         return dataframe
@@ -75,7 +75,7 @@ class BTCLeaderBreakV4(IStrategy):
         # AND local-pair 1h volume confirmation (v0.3.0 Finding 1: local
         # volume on trade pair >> signal-source volume).
         dataframe.loc[
-            (dataframe["btc_usdt_close_4h"] > dataframe["btc_usdt_donchian_high_8_4h"])
+            (dataframe["btc_usdt_close_4h"] > dataframe["btc_usdt_donchian_high_10_4h"])
             & (dataframe["btc_usdt_ema50_4h"] > dataframe["btc_usdt_ema200_4h"])
             & (dataframe["volume"] > 1.3 * dataframe["volume_sma20"]),
             "enter_long",
