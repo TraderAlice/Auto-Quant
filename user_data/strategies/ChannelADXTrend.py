@@ -1,23 +1,18 @@
 """
-ChannelADXTrend — 1d-regime + 4h-ADX-gated trend, 1h EMA20 cross-back entry
+ChannelADXTrend — 1d-regime + 4h-ADX/EMA20>50 + 1h EMA50 pullback-and-reclaim
 
 Paradigm: trend-following
-Hypothesis: v0.3.0's MTFTrendStack reached 0.74 with a 1d EMA200 regime + 4h
-            EMA9>EMA21 trend + 1h pullback entry, but EMA-cross signals are
-            inherently lagging (the trend is half-over by the time EMA9
-            crosses EMA21). Try a structurally different trend gate: 4h ADX
-            (Wilder's directional-movement strength) which fires on trend
-            EXISTENCE rather than trend INFLECTION, plus a 1d SMA100 (not
-            EMA200) for a less-lagged regime filter that should re-engage
-            faster after bear→bull regime transitions (relevant in 2022→2023).
-            Entry on a 1h EMA20 cross-back from below — a "buy the first
-            higher low" pattern. Equal-weight (no custom_stake_amount): this
-            is the honest control case for whether sizing-aware strategies
-            owe their survival to the sizing or to real edge.
-Parent: root (paradigm-inspired by v0.2.0/v0.3.0 trend work but structurally
-        different: ADX gate not EMA cross, SMA100 1d not EMA200 1d, EMA20
-        cross-back entry not pullback-touch)
-Created: pending — fill in after first commit
+Hypothesis: r1 round-1 result was catastrophic (Sharpe -2.14, 4404 trades,
+            WR 19%, profit -73%) — the EMA20 cross-back entry fires on
+            every wiggle through a fast MA, and ADX>22 + 1d SMA100 alone
+            don't filter the noise. r2 evolution: keep the regime + ADX
+            scaffolding but (a) tighten ADX>25, (b) add a 4h EMA20>EMA50
+            structural-trend gate, and (c) replace the noisy EMA20 cross
+            with a slower "pullback to 1h EMA50 then reclaim" entry. This
+            should cut trade frequency 5-10x and lift WR — the question is
+            whether the surviving trades carry meaningful edge.
+Parent: root (self-evolution; r1 commit 7a58a63 was the catastrophic baseline)
+Created: 7a58a63 (r1)
 Status: active
 Uses MTF: yes
 """
@@ -47,6 +42,8 @@ class ChannelADXTrend(IStrategy):
     @informative("4h")
     def populate_indicators_4h(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         dataframe["adx"] = ta.ADX(dataframe, timeperiod=14)
+        dataframe["ema20"] = ta.EMA(dataframe, timeperiod=20)
+        dataframe["ema50"] = ta.EMA(dataframe, timeperiod=50)
         return dataframe
 
     @informative("1d")
@@ -55,23 +52,23 @@ class ChannelADXTrend(IStrategy):
         return dataframe
 
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        dataframe["ema20"] = ta.EMA(dataframe, timeperiod=20)
+        dataframe["ema50"] = ta.EMA(dataframe, timeperiod=50)
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+        # Pullback-and-reclaim: prior bar touched/dipped through 1h EMA50;
+        # current bar closes back above it. Combined with multi-TF trend
+        # confirmation (1d SMA100 regime + 4h ADX>25 + 4h EMA20>EMA50).
         dataframe.loc[
             (dataframe["close"] > dataframe["sma100_1d"])
-            & (dataframe["adx_4h"] > 22)
-            & (dataframe["close"] > dataframe["ema20"])
-            & (dataframe["close"].shift(1) < dataframe["ema20"].shift(1)),
+            & (dataframe["adx_4h"] > 25)
+            & (dataframe["ema20_4h"] > dataframe["ema50_4h"])
+            & (dataframe["close"] > dataframe["ema50"])
+            & (dataframe["low"].shift(1) <= dataframe["ema50"].shift(1)),
             "enter_long",
         ] = 1
         return dataframe
 
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        dataframe.loc[
-            (dataframe["close"] < dataframe["ema20"])
-            & (dataframe["close"].shift(1) > dataframe["ema20"].shift(1)),
-            "exit_long",
-        ] = 1
+        dataframe.loc[dataframe["close"] < dataframe["ema50"], "exit_long"] = 1
         return dataframe
