@@ -64,27 +64,21 @@ class TrendRegimeFiltered(IStrategy):
     @informative("1d")
     def populate_indicators_1d(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         dataframe["ema200"] = ta.EMA(dataframe, timeperiod=200)
-        # r2: 7d slope of EMA200 (today's vs 7-bar-prior). Slope > 0 → regime
-        # is structurally improving, not just briefly poking above EMA200.
-        dataframe["ema200_slope_up"] = (
-            dataframe["ema200"] > dataframe["ema200"].shift(7)
-        ).astype(int)
         return dataframe
 
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # r2: keep 1.05× buffer + ADD 1d EMA200 slope-up. r1's buffer alone
-        # was roughly neutral (full 0.38→0.34, winter -0.31→-0.39); the
-        # missing piece is regime-direction. ema200_1d can be FALLING but
-        # price still 5% above it (e.g., bull tail before winter break).
-        # Slope-up gates entries to regimes where the 1d trend is still
-        # structurally improving.
+        # r3: revert r1+r2 layered defenses (1.05× buffer and slope-up
+        # filter both ineffective). Back to r0 baseline: 4h ema cross +
+        # 1d close > EMA200. Per v0.4.0 ChannelADXTrend's experience and
+        # r1+r2 here, the right move next is probably patient EXIT
+        # (v0.4.0 r13: SMA50→SMA75 lifted regime-mix sharpe 0.69→0.80)
+        # not stricter entries. r4 will try that if needed.
         dataframe.loc[
             (dataframe["ema20_4h"] > dataframe["ema50_4h"])
-            & (dataframe["close"] > dataframe["ema200_1d"] * 1.05)
-            & (dataframe["ema200_slope_up_1d"] == 1),
+            & (dataframe["close"] > dataframe["ema200_1d"]),
             "enter_long",
         ] = 1
         return dataframe
