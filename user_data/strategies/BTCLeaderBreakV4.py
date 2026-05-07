@@ -112,8 +112,8 @@ class BTCLeaderBreakV4(IStrategy):
         atr_pct = df["atr_pct_4h"].iloc[-1]
         if atr_pct != atr_pct or atr_pct <= 0:
             return proposed_stake
-        # r19: vol_target 0.015→0.010 (mirror Vol r18, one step behind).
-        vol_target = 0.010
+        # r20 (final): vol_target 0.010→0.005 (mirror Vol r19).
+        vol_target = 0.005
         scale = min(1.0, vol_target / atr_pct)
         stake = proposed_stake * scale
         return max(min_stake or 0.0, min(max_stake, stake))
