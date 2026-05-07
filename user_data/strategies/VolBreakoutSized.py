@@ -108,7 +108,11 @@ class VolBreakoutSized(IStrategy):
         atr_pct = df["atr_pct_4h"].iloc[-1]
         if atr_pct != atr_pct or atr_pct <= 0:
             return proposed_stake
-        vol_target = 0.025
+        # r16: vol_target 0.025 → 0.020 — tighter de-risking. Tests
+        # whether more conservative sizing improves Sharpe by reducing
+        # variance in high-vol regimes (e.g. 2022). Risk: under-sizes
+        # in calm bull periods too.
+        vol_target = 0.020
         scale = min(1.0, vol_target / atr_pct)
         stake = proposed_stake * scale
         return max(min_stake or 0.0, min(max_stake, stake))

@@ -49,10 +49,6 @@ class MomentumMTFConfluence(IStrategy):
         macd = ta.MACD(dataframe, fastperiod=12, slowperiod=26, signalperiod=9)
         dataframe["macd"] = macd["macd"]
         dataframe["macdsignal"] = macd["macdsignal"]
-        # r15: ADX strength gate — only enter when 4h trend has actual
-        # directional movement, not just MACD-cross noise inside chop.
-        # Tests if the structural 0.4 ceiling can be broken.
-        dataframe["adx"] = ta.ADX(dataframe, timeperiod=14)
         return dataframe
 
     @informative("1d")
@@ -69,7 +65,6 @@ class MomentumMTFConfluence(IStrategy):
         dataframe.loc[
             (dataframe["close"] > dataframe["sma50_1d"])
             & (dataframe["macd_4h"] > dataframe["macdsignal_4h"])
-            & (dataframe["adx_4h"] > 22)
             & (dataframe["close"] > dataframe["ema20"])
             & (dataframe["close"].shift(1) <= dataframe["ema20"].shift(1)),
             "enter_long",
