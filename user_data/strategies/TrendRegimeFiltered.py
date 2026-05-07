@@ -67,11 +67,6 @@ class TrendRegimeFiltered(IStrategy):
         return dataframe
 
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # r4: 4h SMA75 used for patient-exit trigger. v0.4.0 r13 found
-        # regime-mixed data prefers SMA75-100 over SMA50 (the
-        # bull-conditional sweet spot). Translating to 1h timeframe by
-        # building a 4h-equivalent SMA75 = 300-bar SMA on 1h.
-        dataframe["sma75_4h_eq"] = dataframe["close"].rolling(300).mean()
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
@@ -89,9 +84,9 @@ class TrendRegimeFiltered(IStrategy):
         return dataframe
 
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # r4: switch from symmetric 4h ema cross exit to patient SMA75-eq
-        # exit (300-bar SMA on 1h ≈ SMA75 on 4h). Per v0.4.0 r13: regime-
-        # mixed data prefers patient exits — they cut whipsaws that fast
-        # MA-cross exits suffer in winter.
-        dataframe.loc[dataframe["close"] < dataframe["sma75_4h_eq"], "exit_long"] = 1
+        # r5: revert r4 patient-SMA75 exit. r4 found patient exit lifted
+        # winter loss (-0.31→-0.46 sharpe) — letting losers run is wrong
+        # in regime mix when winter trades are mostly false positives.
+        # Symmetric 4h ema cross exit cuts faster.
+        dataframe.loc[dataframe["ema20_4h"] < dataframe["ema50_4h"], "exit_long"] = 1
         return dataframe
