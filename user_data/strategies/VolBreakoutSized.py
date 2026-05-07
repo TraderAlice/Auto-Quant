@@ -108,9 +108,9 @@ class VolBreakoutSized(IStrategy):
         atr_pct = df["atr_pct_4h"].iloc[-1]
         if atr_pct != atr_pct or atr_pct <= 0:
             return proposed_stake
-        # r18: vol_target 0.015 → 0.010 (continue tightening). r17 lifted
-        # Sharpe to 1.193 record — test if curve still climbs or peaks here.
-        vol_target = 0.010
+        # r19: vol_target 0.010 → 0.005 (peak-mapping step). r18 lifted to
+        # 1.267 record. Test boundary where Sharpe peaks vs profit collapses.
+        vol_target = 0.005
         scale = min(1.0, vol_target / atr_pct)
         stake = proposed_stake * scale
         return max(min_stake or 0.0, min(max_stake, stake))
