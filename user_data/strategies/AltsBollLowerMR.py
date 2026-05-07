@@ -72,16 +72,23 @@ class AltsBollLowerMR(IStrategy):
         dataframe["bb_lower"] = sma - bb_std * std
         dataframe["bb_mid"] = sma
         dataframe["rsi"] = ta.RSI(dataframe, timeperiod=14)
+        # r11: volume SMA20 — transfer CrashRebound r10 finding (volume
+        # filter lifted CrashRebound robust_sharpe 0.003→0.062). Real
+        # capitulation rebounds need volume; chop-driven BB excursions
+        # don't.
+        dataframe["volume_sma20"] = dataframe["volume"].rolling(20).mean()
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # 1h close pierces lower BB (>2σ excursion) + RSI confirmation
-        # (loose, just to filter out one-bar spikes that fake-print) +
-        # 1d slope-up regime gate.
+        # r11: ADD volume>1.3*SMA20 filter. r10 baseline winter -0.48
+        # / -10.7% — slope filter alone insufficient because BB
+        # excursions fire too often in chop. Volume confirmation
+        # selects real capitulations (the only kind that bounce).
         dataframe.loc[
             (dataframe["close"] < dataframe["bb_lower"])
             & (dataframe["rsi"] < 35)
-            & (dataframe["ema200_slope_up_1d"] == 1),
+            & (dataframe["ema200_slope_up_1d"] == 1)
+            & (dataframe["volume"] > 1.3 * dataframe["volume_sma20"]),
             "enter_long",
         ] = 1
         return dataframe
