@@ -80,14 +80,17 @@ class AltsBollLowerMR(IStrategy):
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # r11: ADD volume>1.3*SMA20 filter. r10 baseline winter -0.48
-        # / -10.7% — slope filter alone insufficient because BB
-        # excursions fire too often in chop. Volume confirmation
-        # selects real capitulations (the only kind that bounce).
+        # r12: r11 volume filter didn't transfer (winter still -0.47).
+        # ADD close > 1d EMA200 as second regime gate. Double-gate:
+        # slope-up (trajectory) AND price-above (instant position). The
+        # bear-market rallies during winter that triggered slope-up
+        # briefly DON'T satisfy close > EMA200 — that's the structural
+        # tighten.
         dataframe.loc[
             (dataframe["close"] < dataframe["bb_lower"])
             & (dataframe["rsi"] < 35)
             & (dataframe["ema200_slope_up_1d"] == 1)
+            & (dataframe["close"] > dataframe["ema200_1d"])
             & (dataframe["volume"] > 1.3 * dataframe["volume_sma20"]),
             "enter_long",
         ] = 1
