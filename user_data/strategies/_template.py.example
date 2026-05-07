@@ -21,7 +21,8 @@ File names starting with `_` are ignored by run.py — that's how this
 template stays excluded from backtests.
 
 ========================================================================
-MULTI-TIMEFRAME + CROSS-ASSET + DYNAMIC SIZING (v0.3.0–v0.4.0)
+MULTI-TIMEFRAME + CROSS-ASSET + DYNAMIC SIZING + BASKET + TIMERANGES
+                          (v0.3.0 → v0.4.1)
 ========================================================================
 
 Data is pre-downloaded for three timeframes: 1h (base), 4h, and 1d.
@@ -73,6 +74,40 @@ method below lets your strategy decide stake per trade rather than
 relying on default equal-weight allocation. Useful for vol-targeting,
 signal-strength weighting, or regime-conditional sizing. Default is
 equal-weight if you don't implement / delete it.
+
+Portfolio basket (v0.4.1): declare `pair_basket = [...]` to restrict
+this strategy to a subset of the 5-pair whitelist. If unset, defaults
+to ALL 5 pairs. Use this when the paradigm clearly fits some assets
+better than others (e.g., trend works on alts but not BTC; MR is
+BNB-skewed). The strategy will only be evaluated on its declared
+basket and per-pair metrics are constrained accordingly.
+
+Multi-timerange testing (v0.4.1): declare `test_timeranges = [...]` as
+a list of `(label, "YYYYMMDD-YYYYMMDD")` tuples. The backtest runs once
+per timerange and run.py reports each result block. The strategy then
+gets a SUMMARY block with `robust_sharpe = min(sharpes_across_timeranges)`,
+plus multi-objective gate flags (profit_floor PASS/FAIL, min_position_size
+PASS/FAIL, pareto_dominated_by). Use this for cross-regime robustness
+testing (e.g., 2021_bull / 2022_winter / recovery / full) or for OOS
+splits (e.g., train_21_24 / test_25). If unset, defaults to single
+backtest over the full timerange.
+
+Multi-objective oracle (v0.4.1): the SUMMARY block reports three gate
+flags alongside `robust_sharpe`:
+  - profit_floor:    each timerange must show ≥ 20% portfolio profit
+  - min_position_size: avg trade stake ≥ 5% of wallet (catches the v0.4.0
+                       "Sharpe-via-tiny-stakes" Pareto degeneracy)
+  - pareto_dominated_by: any prior commit's row that beats this on
+                         (sharpe, max_dd) jointly
+A FAIL flag isn't an automatic kill — agent decides — but it's a strong
+signal that the headline number is misleading.
+
+Buy-and-hold benchmark (v0.4.1): each timerange's `---` block now reports
+`bah_sharpe`, `bah_profit_pct`, `bah_dd_pct` for an equal-weight buy-
+and-hold portfolio over the same pairs and timerange. Compare your
+strategy's edge against "doing nothing" — if your strategy is below
+BaH on Sharpe AND below on profit, you might just be levering BaH with
+extra friction.
 """
 
 from pandas import DataFrame
@@ -105,6 +140,35 @@ class _Template(IStrategy):
     # When using @informative, include warmup for the slowest indicator across
     # all timeframes (e.g., SMA200 on 1d needs 200 daily bars).
     startup_candle_count: int = 30
+
+    # ---- OPTIONAL v0.4.1: portfolio basket — restrict the trade universe ----
+    # If unset, the strategy is evaluated on ALL 5 pairs in the whitelist.
+    # Declare a subset to opt into asset-specific paradigm fit.
+    # Examples:
+    #   pair_basket = ["BTC/USDT", "ETH/USDT"]              # majors only
+    #   pair_basket = ["SOL/USDT", "BNB/USDT", "AVAX/USDT"]  # alts only
+    #   pair_basket = ["BNB/USDT"]                          # single asset
+    # pair_basket = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "AVAX/USDT"]
+
+    # ---- OPTIONAL v0.4.1: multi-timerange testing ----
+    # Declare a list of (label, "YYYYMMDD-YYYYMMDD") tuples. The strategy is
+    # backtested once per timerange; run.py emits a `---` block per timerange
+    # and a SUMMARY block with robust_sharpe = min over all declared ranges.
+    # If unset, defaults to a single full backtest (20210101-20251231).
+    # Canonical regime cuts on the v0.4.1 dataset:
+    #   ("bull_2021",       "20210101-20211231")  # 2021 bull
+    #   ("winter_2022",     "20220101-20221231")  # 2022 bear
+    #   ("recovery_23_25",  "20230101-20251231")  # 2023-25 recovery
+    #   ("full_5y",         "20210101-20251231")  # everything
+    # OOS-style splits also useful:
+    #   ("train_21_24",     "20210101-20241231")
+    #   ("test_25",         "20250101-20251231")
+    # test_timeranges = [
+    #     ("bull_2021",      "20210101-20211231"),
+    #     ("winter_2022",    "20220101-20221231"),
+    #     ("recovery_23_25", "20230101-20251231"),
+    #     ("full_5y",        "20210101-20251231"),
+    # ]
 
     # ---- OPTIONAL: multi-timeframe via @informative ----
     # Delete these methods if your strategy is pure 1h.

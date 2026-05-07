@@ -73,10 +73,23 @@ Plus:
   5 pairs (BTC/ETH/SOL/BNB/AVAX), and emits per-pair metrics. **First
   project-wide clean Sharpe > 1.0** (1.07 on BTCLeaderBreakX). Also: first
   fork event + isolation experiment. See [retrospective](versions/0.3.0/retrospective.md).
-- **v0.4.0** (current): regime extension. Timerange 2023-2025 → 2021-2025
-  to include the 2022 bear regime. Also opens optional dynamic position
-  sizing via `custom_stake_amount`. Tests whether v0.3.0's wins were
-  bull-regime-overfit. In-flight.
+- **v0.4.0** ([archive](versions/0.4.0/)): regime extension to 2021-2025
+  + dynamic position sizing. Real-edge clean Sharpe **1.122 / +232%** on
+  5-year regime mix (strictly stronger than v0.3.0 on harder data). Surfaced
+  the "Sharpe-as-single-oracle has a degeneracy boundary" finding and the
+  cleanest sizing-vs-edge controlled experiment in the project.
+  See [retrospective](versions/0.4.0/retrospective.md).
+- **v0.4.1** (current): four affordances added on top of v0.4.0:
+  - **Portfolio basket** (`pair_basket`): strategies declare which pairs to
+    trade rather than being forced through all 5
+  - **Multi-timerange testing** (`test_timeranges`): each strategy backtested
+    across multiple regime segments per round; `robust_sharpe = min` becomes
+    the headline metric
+  - **Buy-and-hold benchmark**: per-timerange BaH portfolio metrics in every
+    output block
+  - **Multi-objective gates**: `profit_floor`, `min_position_size`,
+    `pareto_dominated_by` flank `robust_sharpe` to defend against the
+    Sharpe-via-tightening Pareto degeneracy v0.4.0 surfaced. In-flight.
 
 ## Requirements
 

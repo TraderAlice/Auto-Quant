@@ -1,25 +1,40 @@
-# Auto-Quant v0.4.0 — regime-extended portfolio with dynamic sizing
+# Auto-Quant v0.4.1 — strategy-declared portfolio + cross-regime testing
 
 This is an experiment to have the LLM do its own quantitative research across
-**multiple parallel strategies** that can combine signals across **multiple
-timeframes** (1h base + 4h + 1d), **multiple assets** (5-pair universe with
-cross-asset signal references), and now **mixed-regime data** (2021-2025
-including the 2022 bear market) with **optional dynamic position sizing**.
+**multiple parallel strategies** that can:
+- combine signals across **multiple timeframes** (1h base + 4h + 1d)
+- reference **multiple assets** (5-pair universe with cross-asset signal references)
+- declare their **own basket** of pairs to trade (subset of the whitelist)
+- declare **their own test timeranges** for cross-regime evaluation
+- use **dynamic position sizing** via `custom_stake_amount`
+- compare against a **buy-and-hold benchmark** computed for the same period
+
+Decision metric (v0.4.1): `robust_sharpe = min(sharpe across declared timeranges)`,
+flanked by `profit_floor`, `min_position_size`, and `pareto_dominated_by` gates.
 
 The progression so far:
 - v0.2.0 added multi-strategy → resisted single-paradigm anchoring
 - v0.3.0 added MTF + multi-asset + per-pair reporting → hit clean Sharpe 1.07
-- **v0.4.0** extends timerange backward to include 2022 winter, AND opens
-  dynamic stake sizing via `custom_stake_amount`. v0.3.0's findings ("cross-pair
-  macro gates redundant in single-regime bull", "no bear-market validation")
-  directly motivated this version.
+- v0.4.0 extended timerange to include 2022 winter + opened sizing affordance
+  → real-edge clean Sharpe 1.122 / +232% on 5-year regime mix; surfaced the
+  Sharpe-as-single-oracle degeneracy boundary
+- **v0.4.1** addresses the v0.4.0 surfacing directly:
+  - **Portfolio basket** (`pair_basket`): strategies declare which pairs to
+    trade, no longer forced through all 5
+  - **Multi-timerange** (`test_timeranges`): each strategy backtested across
+    multiple regime segments in one round, with `robust_sharpe` = worst-case
+    timerange Sharpe as the headline
+  - **Multi-objective oracle**: profit-floor, min-position-size, and
+    Pareto-dominance gates flank the Sharpe number — directly counters the
+    v0.4.0 "tighten vol_target until Sharpe → ∞ but profit → 0" degeneracy
+  - **Buy-and-hold benchmark**: per-timerange BaH portfolio Sharpe + return
+    + DD, computed from 1d feathers and reported alongside strategy metrics
 
-**The v0.4.0 honesty test**: v0.3.0's three winning strategies achieved their
-peak Sharpes on a pure-bull 2023-2025 segment. Many of those wins are likely
-regime-overfit. v0.4.0 forces every strategy to face 2022 winter (BTC -75%
-peak-to-trough). Strategies that survive AND maintain edge are real;
-strategies that collapse reveal which v0.3.0 findings were regime-dependent
-artifacts.
+The v0.4.1 honesty bar (more demanding than v0.4.0):
+- A strategy is "real" only if `robust_sharpe` is good across ALL its declared
+  timeranges, AND `profit_floor` PASS, AND `min_position_size` PASS, AND it
+  isn't `pareto_dominated_by` a prior keep
+- Headline Sharpe by itself is no longer enough — the gates must clear
 
 ## Setup
 
@@ -280,6 +295,127 @@ BNB=+0.80; signal is BNB-heavy, trade count 40 not enough". These are the
 observations that make the run's knowledge output per-asset-profile-shaped
 (the original project goal).
 
+### Strategy-declared portfolio basket (new in v0.4.1)
+
+By default a strategy is evaluated on ALL 5 pairs in the whitelist. This
+forces every paradigm through every asset, which is sometimes wrong:
+trend may shine on alts but not on BTC, MR may be BNB-skewed, etc. v0.4.1
+lets a strategy declare its trade universe via a class attribute:
+
+```python
+class YourStrategy(IStrategy):
+    timeframe = "1h"
+    pair_basket = ["SOL/USDT", "BNB/USDT", "AVAX/USDT"]   # alts only
+    ...
+```
+
+The strategy is then only evaluated on its declared basket, both for
+trade execution and for per-pair reporting. The aggregate metrics
+(`sharpe`, `profit_total_pct`, etc.) are over the basket, not the full
+whitelist.
+
+**When to declare a basket:**
+- The paradigm clearly fits some assets better than others (per-pair report
+  shows wide dispersion across the 5 pairs)
+- v0.4.0 surfaced patterns like "MR is BNB-skewed" or "trend has AVAX drag" —
+  basket declaration lets you act on those findings as a first-class
+  design choice, not a post-hoc note
+
+**When NOT to declare a basket:**
+- The paradigm is universal (e.g., a regime filter that should apply to all
+  major crypto)
+- You haven't yet seen evidence of asset-specific fit — start with full
+  basket, observe per-pair dispersion, then prune if warranted
+
+The basket survives across timeranges within a strategy (you can't
+declare different baskets per timerange — that would be two separate
+strategies).
+
+### Multi-timerange testing (new in v0.4.1)
+
+A strategy can declare a list of timeranges to test across. Each declared
+timerange runs as its own backtest; results are emitted as separate
+`---` blocks; a final SUMMARY block reports `robust_sharpe = min over
+declared timeranges`.
+
+```python
+class YourStrategy(IStrategy):
+    test_timeranges = [
+        ("bull_2021",      "20210101-20211231"),  # 2021 bull regime
+        ("winter_2022",    "20220101-20221231"),  # 2022 winter (BTC -75%)
+        ("recovery_23_25", "20230101-20251231"),  # 2023-25 recovery
+        ("full_5y",        "20210101-20251231"),  # full window
+    ]
+```
+
+If unset, defaults to a single backtest over `20210101-20251231` (full).
+
+**Why use multi-timerange:**
+- Cross-regime robustness: a strategy that gets Sharpe 1.5 on bull but -0.5
+  on winter is NOT a Sharpe 1.0 strategy; it's an over-fit one. Multi-timerange
+  surfaces this immediately.
+- Out-of-sample validation: declare `("train_21_24", "20210101-20241231")`
+  and `("test_25", "20250101-20251231")` to get a clean OOS check.
+- Mechanism understanding: which regime carries the edge? which kills it?
+  The per-timerange dispersion is a research output in itself.
+
+**`robust_sharpe`** is the headline metric for a strategy in v0.4.1 —
+it's the worst-timerange Sharpe across all declared ranges. Use this
+when judging keep/kill — single-timerange Sharpe can hide regime
+overfit.
+
+**Trade-off**: backtest time scales linearly with number of timeranges.
+4 declared timeranges = 4× backtest time per round. Choose meaningfully —
+you don't need 8 timeranges. 2-4 is usually plenty.
+
+### Buy-and-hold benchmark (new in v0.4.1)
+
+Each timerange's `---` block now reports:
+
+```
+bah_sharpe:       0.93
+bah_profit_pct:   187.3
+bah_dd_pct:       -65.2
+```
+
+These are the equal-weight buy-and-hold portfolio metrics over the same
+pairs and timerange. Compare your strategy directly:
+- If `sharpe < bah_sharpe` AND `profit < bah_profit`, your strategy is
+  strictly worse than doing nothing — kill it
+- If your strategy beats BaH on Sharpe but not profit, you're trading
+  return for risk-adjustment (might be intentional)
+- If your strategy beats BaH on both, you have real alpha
+
+In `results.tsv` notes, **always cite BaH for context** — e.g., "Sharpe 1.12
+beats BaH 0.93 on full timerange; profit 232% beats BaH 187%". Without
+the BaH reference, the agent can over-celebrate strategies that just track
+the market.
+
+### Multi-objective gates (new in v0.4.1)
+
+In addition to `robust_sharpe`, the per-strategy SUMMARY block reports
+three pass/fail gates:
+
+```
+profit_floor:        PASS  (threshold ≥ 20% per timerange)
+min_position_size:   PASS  (threshold ≥ 5%)
+pareto_dominated_by: none (non-dominated)
+```
+
+- **profit_floor**: each declared timerange must clear ≥20% portfolio profit.
+  Catches "Sharpe-via-tightening-stake" Pareto degeneracy from v0.4.0.
+- **min_position_size**: average trade stake / wallet must be ≥5%. Same
+  defense — prevents sizing → 0 from inflating Sharpe.
+- **pareto_dominated_by**: the SUMMARY's robust_sharpe + worst-DD pair
+  is checked against all prior commits' rows in `results.tsv`. If any
+  prior strategy has `sharpe ≥ yours` AND `dd ≥ yours` (less negative),
+  this row is marked dominated. A dominated current strategy is a kill
+  candidate — there's no reason to keep it when a prior is strictly better.
+
+**A FAIL gate isn't an automatic kill** — agent decides. But it's a strong
+signal that the headline number is misleading. When deciding keep/kill,
+weigh gates as inputs alongside the metrics.
+
 ### Hard rules on strategy lifecycle
 
 **Rule 1: Hard cap — 3 active strategies.**
@@ -313,30 +449,57 @@ is more valuable than depth in this run.
 
 ## Output format
 
-Once `run.py` finishes, stdout has one `---` block per strategy, like:
+Once `run.py` finishes, stdout has one `---` block **per (strategy, timerange)
+combination**, plus a final SUMMARY block per strategy. If a strategy declares
+4 timeranges, you get 4 backtest blocks + 1 SUMMARY = 5 blocks for that
+strategy.
+
+Per-timerange block:
 
 ```
 ---
-strategy:         MeanRevRSI
+strategy:         YourStrategy
+timerange_label:  bull_2021
+timerange:        20210101-20211231
 commit:           abc1234
-timerange:        20230101-20251231
-sharpe:           0.8234
-sortino:          1.0412
-calmar:           0.5821
-total_profit_pct: 45.3210
-max_drawdown_pct: -8.9123
-trade_count:      142
-win_rate_pct:     54.2300
-profit_factor:    1.6700
-pairs:            BTC/USDT,ETH/USDT
-
----
-strategy:         TrendDonchian
-commit:           abc1234
-...
+basket:           BTC/USDT,ETH/USDT,SOL/USDT,BNB/USDT,AVAX/USDT
+sharpe:           1.2300
+sortino:          2.1500
+calmar:           1.8900
+total_profit_pct: 67.5
+max_drawdown_pct: -7.4
+trade_count:      201
+win_rate_pct:     58.0
+profit_factor:    1.85
+bah_sharpe:       1.45
+bah_profit_pct:   132.1
+bah_dd_pct:       -22.3
+per_pair:
+  BTC/USDT: sharpe=0.62 trades=45 profit_pct=18.5 dd_pct=-3.2 wr=58.0 pf=1.72 (bah_profit=98.3 bah_dd=-15.1)
+  ...
 ```
 
-If a strategy crashes, its block looks like:
+Per-strategy SUMMARY block:
+
+```
+---
+strategy:         YourStrategy
+timerange_label:  SUMMARY
+commit:           abc1234
+robust_sharpe:    0.6500   # min across declared timeranges
+worst_profit_pct: 22.4
+worst_dd_pct:     -28.1
+avg_position_pct: 18.7
+profit_floor:     PASS    (threshold ≥ 20% per timerange)
+min_position_size: PASS   (threshold ≥ 5%)
+pareto_dominated_by: none (non-dominated)
+```
+
+**`robust_sharpe`** is the headline metric for v0.4.1 keep/kill decisions —
+it's the worst-timerange Sharpe. Single-timerange Sharpe is no longer
+sufficient; cross-regime robustness must clear too.
+
+If a strategy crashes on any timerange, that timerange's block looks like:
 ```
 ---
 strategy:         SomeBrokenStrategy
@@ -437,26 +600,37 @@ LOOP FOREVER:
 
 11. **Loop.**
 
-### Deciding keep vs kill on a strategy
+### Deciding keep vs kill on a strategy (updated for v0.4.1)
 
-A strategy deserves to stay if:
-- It has positive edge (Sharpe > 0, profit factor > 1) with meaningful trade
-  count (>20 trades over 3 years)
-- Its paradigm is distinct from what the other active strategies cover
-- Recent evolutions have moved it in the right direction
+A strategy deserves to stay if (in priority order):
+1. **`robust_sharpe` is meaningfully positive** (> 0.3 as a soft bar) AND
+   the worst-timerange numbers aren't catastrophic
+2. **All multi-objective gates PASS**: profit_floor, min_position_size,
+   pareto_dominated_by = none
+3. **Beats BaH** at least on Sharpe across the declared timeranges (or has
+   a clear non-Sharpe edge: e.g., much lower DD with comparable profit)
+4. Its paradigm/basket is distinct from other active strategies
+5. Recent evolutions have moved it in the right direction
 
 A strategy deserves to die if:
-- It's been stable for 3 rounds with no improvement and you don't have a new
-  idea for it
-- Its paradigm overlaps strongly with another active strategy that's doing
-  better
-- You need its slot for a fresh paradigm you want to try
-- It's consistently negative and further tweaks won't help (e.g. wrong
-  timeframe for this paradigm)
+- `robust_sharpe` is below 0 (worst regime is genuinely bad — not a
+  recoverable strategy)
+- A gate FAILs (especially `pareto_dominated_by` — there's a strict prior
+  better than this one)
+- Sharpe is below BaH on every declared timerange (you're losing to
+  doing nothing)
+- Stable for 3 rounds with no improvement and no new ideas
+- Paradigm/basket overlaps strongly with a better-performing active strategy
+
+**The v0.4.1 honesty bar:** a strategy that hits Sharpe 1.5 on `bull_2021` but
+-0.5 on `winter_2022` has `robust_sharpe = -0.5` — that's NOT a Sharpe-1.5
+strategy. Keep/kill decisions weight robust_sharpe, not best-case.
 
 **Always log your reasoning.** These notes become the retrospective —
 future you (and the meta-analysis layer) will read them to extract what this
-run actually learned about BTC/ETH 1h.
+run actually learned. Cite BaH for context: "Sharpe 1.12 beats BaH 0.93;
+robust_sharpe 0.85 (winter_2022 is the floor, still positive)" is a useful
+note. "Sharpe 1.12" alone is not.
 
 ### Goodhart watch
 
