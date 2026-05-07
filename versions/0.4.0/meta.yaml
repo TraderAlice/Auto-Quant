@@ -1,0 +1,347 @@
+version: 0.4.0
+title: Regime extension + dynamic sizing — Sharpe-vs-profit Pareto frontier mapped
+date_started: 2026-05-07
+date_completed: 2026-05-07
+branch: autoresearch/may7
+git_tag: v0.4.0
+peak_commit: 011eb08  # round 20 final state — agent self-stopped at "Pareto end"
+real_peak_commit: d86392f  # round 11 — Sharpe 1.122 / +232% profit, the "real" peak before Pareto walk
+
+intervention:
+  summary: |
+    Two structural changes bundled into v0.4.0:
+    (1) Timerange extended from 2023-2025 (bull only) to 2021-2025 (includes
+        2022 winter — BTC -75% peak-to-trough). Directly addresses v0.3.0
+        retrospective's blocking finding "cross-pair macro gates redundant in
+        single-regime bull market".
+    (2) Dynamic position sizing affordance via FreqTrade's custom_stake_amount
+        method, documented in the template. Optional — strategies that don't
+        need sizing logic can use default equal-weight.
+  vs_v0_3_0: |
+    v0.3.0 hit clean Sharpe 1.07 on 3-year pure-bull data with cross-pair
+    breakout (BTCLeaderBreakX). Its retrospective explicitly flagged
+    "no bear-regime validation" and "cross-pair macro gates blocked by
+    single-regime data" as the binding limitations. v0.4.0 lifts the regime
+    constraint and adds sizing as orthogonal risk-control affordance.
+
+asset:
+  pairs: [BTC/USDT, ETH/USDT, SOL/USDT, BNB/USDT, AVAX/USDT]
+  timeframes_base: 1h
+  timeframes_informative: [4h, 1d]
+  timerange: 20210101-20251231
+  exchange: binance
+  regimes_covered: [2021_bull, 2022_winter, 2023_2025_recovery]
+
+experiments:
+  rounds: 20  # agent self-stopped at r20 (declared Pareto-end)
+  total_events: 60
+  events_by_type:
+    create: 6
+    evolve: 29
+    fork: 1
+    kill: 1  # only ONE explicit kill row; multiple strategies were killed
+             # via the agent's "implicit kill via subsequent create note" pattern
+             # (a deviation from v0.2.0/v0.3.0 protocol — see bookkeeping note below)
+    stable: 23
+  strategies_ever_created: 6  # MeanRevRSIDip, ChannelADXTrend, VolBreakoutSized
+                              # + CrossPairMR, BTCLeaderBreakV4, MomentumMTFConfluence
+                              # + 1 fork (VolBreakoutEqual)
+  strategies_killed_actually: 4  # MeanRevRSIDip r5, CrossPairMR r7,
+                                 # ChannelADXTrend r8, VolBreakoutEqual r10
+  strategies_alive_at_end: 3
+  paradigms_tested: 5  # mean-rev (2 implementations), trend, breakout
+                       # (per-pair + cross-pair), momentum
+  paradigms_with_positive_edge: 3  # breakout (per-pair), breakout (cross-pair),
+                                   # momentum (capped)
+  paradigms_killed: 2  # mean-rev (declared exhausted r6), trend (low-ceiling r8)
+
+# IMPORTANT: v0.4.0 has TWO meaningful Sharpe peaks. Reading just one is misleading.
+peaks:
+  real_peak:  # the actual edge of the strategy at real-world position size
+    commit: d86392f
+    round: 11
+    strategy: VolBreakoutSized
+    sharpe: 1.1219
+    profit_pct: 232.0
+    max_dd_pct: -19.9
+    sortino: 4.79
+    calmar: 12.3
+    note: |
+      This is the "real" v0.4.0 peak — the strategy's edge at meaningful
+      portfolio exposure. Sharpe 1.12 on 5-year regime-mixed data including
+      2022 winter, profit +232% (~46%/year), DD -20%. Strictly stronger than
+      v0.3.0's 1.07 on bull-only data.
+  pareto_end_peak:  # what agent reported as final, after walking the Pareto frontier
+    commit: 011eb08
+    round: 20
+    strategy: VolBreakoutSized
+    sharpe: 1.3390
+    profit_pct: 25.0
+    max_dd_pct: -4.3
+    note: |
+      Agent walked the Sharpe-vs-profit Pareto frontier by sequentially
+      tightening vol_target (0.025 → 0.020 → 0.015 → 0.010 → 0.005 → 0.003).
+      Sharpe climbed monotonically from 1.12 to 1.34 while profit collapsed
+      from +232% to +25% (~10× reduction). At the endpoint, profit is in
+      "barely-trades" / "Sharpe-via-tiny-stakes" territory. Agent self-flagged
+      "degenerate territory" and stopped: "gains are now noise. Run stops here
+      for retrospective review." Strictly clean (no Goodhart in the v0.1.0
+      sense), but illustrates that Sharpe-as-single-oracle has a degeneracy
+      boundary at vol_target → 0.
+
+final_portfolio:
+  - name: VolBreakoutSized
+    paradigm: per-pair-breakout
+    sharpe_at_run_end: 1.3390  # Pareto-end (vol_target=0.003)
+    sharpe_real_peak: 1.1219   # at vol_target=0.025, the meaningful peak
+    max_dd_pct_real_peak: -19.9
+    profit_pct_real_peak: 232.0
+    status: alive, LEADER
+    key_structure: |
+      Per-pair Donchian-24 break + 4h EMA50>EMA200 regime + local volume 1.3x
+      + SMA50 patient exit + vol-target sizing. v0.4.0 finding: per-pair
+      Donchian (this strategy, 1.12) is MORE regime-robust than cross-pair
+      Donchian (BTCLeaderBreakV4, 0.79) — flips v0.3.0's relative ordering.
+  - name: BTCLeaderBreakV4
+    paradigm: cross-pair-breakout
+    sharpe_at_run_end: 0.94
+    sharpe_real_peak: 0.79  # at vol_target=0.025, before Pareto walk
+    max_dd_pct_real_peak: -12.8
+    profit_pct_real_peak: 170.0
+    status: alive
+    key_structure: |
+      v0.3.0's BTCLeaderBreakX recipe (BTC 4h Donchian-10 trigger) on regime-
+      mixed data. Sharpe drops ~45% from v0.3.0 (1.07 → 0.59 baseline; 0.79
+      after exit-tuning improvements). Confirms the v0.3.0 cross-pair finding
+      was partly bull-regime-conditional.
+  - name: MomentumMTFConfluence
+    paradigm: momentum
+    sharpe: 0.3993
+    profit_pct: 53.0
+    max_dd_pct: -23.18
+    status: alive, paradigm-cap-confirmed
+    key_structure: |
+      1d SMA50 regime + 4h MACD bullish + 1h EMA20 cross-up entry, equal-weight.
+      Sharpe 0.40 — matches v0.3.0 MACDMomentumMTF (0.41) almost exactly on
+      completely different timerange. **Cross-version paradigm-cap confirmation**:
+      momentum has structural ~0.4 Sharpe ceiling on this universe, independent
+      of regime. Filed as paradigm-level finding, not tuning artifact.
+
+killed_strategies:
+  - name: MeanRevRSIDip
+    paradigm: mean-reversion
+    killed_at_round: 5
+    kill_reason: low_ceiling_with_sizing  # vol-conditional sizing helped survive
+                                          # 2022 but couldn't push edge past 0.03
+  - name: CrossPairMR
+    paradigm: mean-reversion (cross-pair)
+    killed_at_round: 7
+    kill_reason: paradigm_exhausted  # second MR implementation, both BNB-skewed
+  - name: ChannelADXTrend
+    paradigm: trend (no sizing — control case)
+    killed_at_round: 8
+    kill_reason: low_ceiling_plateau  # 4 evolves, +0.05 plateau, AVAX persistent drag
+  - name: VolBreakoutEqual
+    paradigm: per-pair-breakout (equal-weight fork)
+    killed_at_round: 10  # via implicit kill in r10 commit
+    kill_reason: experiment_complete  # the r7 fork experiment "is sizing edge or
+                                      # risk control?" was answered cleanly;
+                                      # slot freed for new paradigm test
+
+aha_moments:
+  - round: 7
+    type: cleanest_sizing_vs_edge_experiment
+    commit: 0a07869
+    summary: |
+      Agent forked VolBreakoutSized → VolBreakoutEqual (only difference: no
+      custom_stake_amount, equal-weight). Identical 1376 trades, same WR 35.1%.
+      Sized: Sharpe 1.085 / profit 150% / DD -16% / Sortino 3.89.
+      Equal: Sharpe 0.972 / profit 220% / DD -20% / Calmar 11.81.
+      Agent's verdict: "VOL-TARGET CARRIES NO EDGE — it's pure risk control.
+      The breakout signal itself has full edge across regime-mixed data."
+      DIRECTLY answers v0.4.0 program.md's named question "real edge or sizing
+      artifact?" — answer is real edge. Cleanest controlled experiment in the
+      project so far.
+  - round: 8
+    type: paradigm_ordering_flips_in_regime_mix
+    commit: 86ee8cd
+    summary: |
+      Agent reproduced v0.3.0's cross-pair Donchian (BTCLeaderBreakX paradigm)
+      as BTCLeaderBreakV4. v0.3.0 Sharpe 1.07 (bull-only) → v0.4.0 Sharpe 0.59
+      (regime-mixed, baseline). Compared against v0.4.0's per-pair Donchian
+      (VolBreakoutSized 1.085): in v0.3.0 cross-pair was leader; in v0.4.0
+      per-pair is leader. Agent's mechanism: "BTC-leader signal triggers ALL
+      pairs simultaneously → concentrated portfolio DD during BTC-leadership
+      cycles. Per-pair Donchian staggers triggers naturally → DD diversifies."
+  - round: 11
+    type: cross_version_paradigm_cap_confirmation
+    commit: d86392f
+    summary: |
+      MomentumMTFConfluence created with v0.3.0 MACDMomentumMTF-equivalent stack.
+      v0.3.0 (5-pair, bull-only): Sharpe 0.41. v0.4.0 (5-pair, regime-mixed):
+      Sharpe 0.40. **Two completely different timeranges, same 0.40 ceiling.**
+      v0.3.0 retrospective speculated: "0.41 may be BTC/ETH-tuning that doesn't
+      generalize". v0.4.0 evidence: it's a paradigm-level structural cap on
+      this 5-pair universe, regime-independent. Major upgrade — speculation
+      to confirmed structural finding.
+  - round: 13
+    type: v0_3_0_finding_corrected
+    commit: d648c0d
+    summary: |
+      BTCLeaderBreakV4 exit SMA50 → SMA75 → BIG WIN (Sharpe 0.69→0.80, profit
+      99→149%, DD -19.5→-11.6%, all 5 pairs improved). Agent: "v0.3.0's
+      terminal SMA50 was bull-regime-conditional sub-optimum. In regime mix,
+      more patience pays (skip 2022 whipsaws)." **Updates v0.3.0 retrospective
+      finding:** the patient-exit "SMA50 sweet spot" claim was bull-conditional;
+      regime-mixed optimum is SMA75-100.
+  - round: 16
+    type: filter_stack_overload_generalized
+    commit: c4d2ea5
+    summary: |
+      Tried to push MomentumMTFConfluence past its 0.40 cap by adding a 4h
+      ADX>22 gate. Sharpe collapsed 0.40 → 0.14. Agent generalized: "v0.3.0
+      Finding 4 ('volume helps when stack is light, hurts when heavy')
+      generalizes to OTHER filter types — filter-stack-overload is paradigm-
+      agnostic." Strengthens v0.3.0's finding from a volume-specific rule
+      to a universal rule.
+  - round: 15
+    type: pareto_frontier_self_recognition
+    commit: c4d2ea5
+    summary: |
+      VolBreakoutSized SMA50 → SMA75: Sharpe 1.122 → 1.058 (DOWN), profit
+      232% → 398% (UP), DD -19.9% → -17.6% (better). Agent: "Sharpe DOWN
+      while profit and DD both improved — opposite-of-Goodhart signature,
+      sliding along Pareto frontier." Reverted to SMA50 to honor Sharpe-as-
+      primary, but explicitly recorded: "SMA50 is the Sharpe optimum;
+      SMA75 is the absolute-profit optimum." Explicit Pareto-frontier
+      awareness — different optima for different objectives.
+  - round: 17-20
+    type: pareto_walk_until_degenerate_then_self_stop
+    commits: [5411434, 31e476d, 70bdbf2, 7ac892a, 011eb08]
+    summary: |
+      Agent sequentially tightened vol_target on VolBreakoutSized:
+      0.025 → 0.020 → 0.015 → 0.010 → 0.005 → 0.003.
+      Sharpe ladder:  1.122 → 1.155 → 1.193 → 1.267 → 1.327 → 1.339
+      Profit ladder:  232%  → 188%  → 140%  → 95%   → 44.5% → 25%
+      Sharpe monotonically up, profit monotonically down. At round 20 agent
+      self-flagged: "Sharpe-via-tightening peak found near 0.005-0.003
+      boundary; gains are now noise. Run stops here for retrospective
+      review." This is a NEW kind of Goodhart-adjacent behavior: not the
+      v0.1.0-style oracle hack, but the natural degeneracy of
+      Sharpe-as-single-oracle when sizing → 0. Agent recognized AND stopped.
+
+comparative_findings:
+  # Things v0.4.0 produced that earlier versions could not, OR things v0.4.0
+  # corrected from earlier versions
+  - title: Vol-target sizing is risk-control, not edge (cleanly proven)
+    evidence_commits: [0a07869]
+    detail: See aha #1 (r7 fork experiment).
+  - title: Per-pair > cross-pair Donchian in regime-mixed data
+    evidence_commits: [86ee8cd, d648c0d]
+    detail: |
+      v0.3.0's relative paradigm ordering reverses under regime mix. Cross-pair
+      leader signals concentrate portfolio DD during leadership cycles;
+      per-pair signals stagger naturally and diversify DD.
+  - title: Momentum paradigm has structural ~0.4 Sharpe cap
+    evidence_commits: [d86392f, c4d2ea5]
+    detail: |
+      Confirmed across two independent runs (v0.3.0 + v0.4.0), two regimes
+      (bull-only + mixed), two timeranges. Universe-level structural cap,
+      not tuning artifact. This MOVES v0.3.0's retrospective speculation
+      to confirmed finding.
+  - title: SMA50 patient exit was bull-conditional; regime mix prefers SMA75-100
+    evidence_commits: [d648c0d, 54c2256]
+    detail: |
+      v0.3.0's BTCLeaderBreakX terminal SMA50 transferred poorly. SMA75 (V4 r13)
+      lifted Sharpe 15%, profit 50%, cut DD 40%. SMA100 essentially equivalent
+      to SMA75 (broad local optimum). v0.4.0 *corrects* v0.3.0's specific
+      patient-exit value but reaffirms the patient-exit family as right direction.
+  - title: Filter-stack-overload is paradigm-agnostic (not just volume)
+    evidence_commits: [c4d2ea5]
+    detail: |
+      v0.3.0's "volume filter universal when stack is light, hurts when heavy"
+      generalizes to ANY filter on a heavy stack. ADX gate killed
+      MomentumMTFConfluence's 0.40 baseline (→ 0.14) when stack was already
+      1d+4h+1h confluent.
+  - title: Mean-reversion exhausted on 5-pair regime-mixed universe
+    evidence_commits: [ec575ca, 3263474]
+    detail: |
+      Two MR implementations × 4 evolves total → no aggregate positive Sharpe.
+      Both showed BNB-only-positive structural skew. MR paradigm declared
+      exhausted on this universe. Negative paradigm finding, but with
+      cross-strategy emergent pattern (BNB-skew) preserved as record.
+  - title: Sharpe-vs-profit Pareto frontier explicitly mapped
+    evidence_commits: [5411434, 31e476d, 70bdbf2, 7ac892a, 011eb08]
+    detail: |
+      Sequential vol_target tightening produced a clean monotonic curve:
+      Sharpe ↑ ↔ profit ↓ ↔ DD ↓. Different objectives have different optima.
+      First time the project produced an explicit Pareto curve as a research
+      artifact (rather than a single-point optimum).
+
+behavioral_observations:
+  - title: Self-recognition of Pareto-end degeneracy + voluntary stop
+    note: |
+      Agent walked the Sharpe-vs-profit frontier deliberately for ~5 rounds,
+      labeled "boundary territory" at vol_target=0.005 and "degenerate
+      territory" at 0.003, and stopped on its own (commit 011eb08 note:
+      "Run stops here for retrospective review"). This is novel behavior:
+      not Goodhart correction (no Sharpe drop signaling discovery), but
+      principled judgment that a single-metric optimization is approaching
+      a structural ceiling beyond which further tightening doesn't represent
+      genuine improvement. Compare v0.1.0 retroactive Goodhart self-correction
+      (round 82) — different mechanism, both involve agent recognizing
+      metric-mechanism boundaries.
+  - title: First explicit fork experiment as controlled trial (r7)
+    note: |
+      Unlike v0.3.0's fork (which was a paradigm-swap try), v0.4.0's fork
+      was a deliberate ABLATION experiment — same strategy, only the sizing
+      differed. The clean controlled-experiment design produced the cleanest
+      sizing-vs-edge answer in the project. Pattern worth naming:
+      "ablation fork" = fork to isolate a single design dimension's
+      contribution.
+  - title: Bookkeeping issue — implicit kills not logged as explicit events
+    note: |
+      Only 1 explicit kill row in results.tsv, but 4 strategies were actually
+      killed (MeanRevRSIDip r5, CrossPairMR r7, ChannelADXTrend r8,
+      VolBreakoutEqual r10). Agent used the pattern "create note mentions
+      killing X" instead of separate kill rows. Breaks analysis.ipynb's
+      "alive set" derivation logic. This is a process drift from
+      v0.2.0/v0.3.0 protocol. Recommend v0.5.0 program.md tighten the rule
+      ("kill REQUIRES a separate event row, even when paired with create"),
+      OR analysis.ipynb gain robustness to this representation.
+  - title: Round 1 missing from tsv
+    note: |
+      Round 1 commit doesn't appear in results.tsv (rounds jump 0 → 2). May
+      indicate agent skipped logging during a re-run or context confusion.
+      Minor data gap; doesn't affect overall narrative.
+  - title: Zero classic Goodhart attempts — fourth run in a row
+    note: |
+      No exit_profit_only toggles, no tight ROI clipping, no Sharpe-up-while-
+      profit-down without explicit Pareto-walk justification. The Pareto
+      walk in r17-20 IS Sharpe-up-profit-down but is structurally different
+      (legitimate de-risking, not metric exploitation) and the agent
+      explicitly labeled it.
+
+limitations:
+  - peak_ambiguity: |
+      Two peaks (real 1.122 / Pareto-end 1.339) require careful framing in
+      external communications. The 1.339 number is technically valid but
+      misleading without context. Future versions may want to constrain
+      the Pareto walk via program.md guidance, OR add a multi-objective
+      oracle.
+  - bookkeeping_drift: |
+      Kill events not consistently logged. Already noted above.
+  - shorter_run: |
+      20 rounds vs v0.3.0's 39 / v0.2.0's 81 / v0.1.0's 99. Per-round
+      backtest time grew (5 years × 5 pairs × 3 TFs). Agent stopped early
+      partly due to context saturation, partly because Pareto walk reached
+      degeneracy. Future versions may want external orchestrator (route B)
+      to extend research depth.
+  - still_no_external_benchmark: |
+      Buy-and-hold over 2021-2025 5-pair universe was probably ~+200% with
+      Sharpe ~1.0. v0.4.0 real peak (+232%, Sharpe 1.12) finally beats BaH
+      meaningfully — but the comparison is not yet computed in run.py.
+      Recommend v0.5.0+ inject BaH reference.
+  - still_single_asset_class: |
+      Crypto majors only. No equity, no commodity, no fx. Cross-asset-class
+      generalization untested.
