@@ -70,11 +70,13 @@ class TrendRegimeFiltered(IStrategy):
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # 4h trend up + 1d macro bull. The 1d filter is the load-bearing
-        # piece — it should silence entries during 2022 winter.
+        # r1: tighten 1d regime filter from `close > EMA200_1d` to
+        # `close > EMA200_1d * 1.05` (5% buffer). r0 had 15 winter trades
+        # WR 26.7% → -6.17%; the marginal-regime entries near the EMA200
+        # crossover were the bad ones. Buffer should silence those.
         dataframe.loc[
             (dataframe["ema20_4h"] > dataframe["ema50_4h"])
-            & (dataframe["close"] > dataframe["ema200_1d"]),
+            & (dataframe["close"] > dataframe["ema200_1d"] * 1.05),
             "enter_long",
         ] = 1
         return dataframe

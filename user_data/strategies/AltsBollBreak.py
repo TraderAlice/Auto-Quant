@@ -55,32 +55,34 @@ class AltsBollBreak(IStrategy):
 
     @informative("4h")
     def populate_indicators_4h(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        dataframe["adx"] = ta.ADX(dataframe, timeperiod=14)
+        dataframe["ema50"] = ta.EMA(dataframe, timeperiod=50)
+        dataframe["ema200"] = ta.EMA(dataframe, timeperiod=200)
         return dataframe
 
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        bb_period = 20
-        bb_std = 2.0
-        sma = dataframe["close"].rolling(bb_period).mean()
-        std = dataframe["close"].rolling(bb_period).std()
-        dataframe["bb_upper"] = sma + bb_std * std
-        dataframe["bb_mid"] = sma
+        # r1: Bollinger upper-band single-bar trigger replaced with Donchian-48
+        # sustained-break (2 consecutive closes above 48-bar prior high). The
+        # BB-single-bar version caught local tops that reverted (wr 32.7%).
+        dataframe["donchian_high_48"] = dataframe["high"].rolling(48).max().shift(1)
         dataframe["volume_sma20"] = dataframe["volume"].rolling(20).mean()
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Statistical breakout: close pierces upper Bollinger band, with
-        # volume confirmation and a trending-not-chop 4h ADX gate.
+        # r1: 2-bar sustained break + 4h macro bull (ema50>ema200) replaces
+        # ADX-only chop gate. The 4h macro filter is the load-bearing change —
+        # ADX>25 fired in winter chop too, contributing to -2.33 winter sharpe.
+        prior_close_above = dataframe["close"].shift(1) > dataframe["donchian_high_48"].shift(1)
         dataframe.loc[
-            (dataframe["close"] > dataframe["bb_upper"])
-            & (dataframe["adx_4h"] > 25)
+            (dataframe["close"] > dataframe["donchian_high_48"])
+            & prior_close_above
+            & (dataframe["ema50_4h"] > dataframe["ema200_4h"])
             & (dataframe["volume"] > 1.3 * dataframe["volume_sma20"]),
             "enter_long",
         ] = 1
         return dataframe
 
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Exit on mean reversion to band midline (not the lower band — that
-        # would let losers run too long).
-        dataframe.loc[dataframe["close"] < dataframe["bb_mid"], "exit_long"] = 1
+        # r1: Exit on 4h macro flip (ema50 < ema200) — patient ride-the-move.
+        # Replaces the BB-mid exit which was too tight for sustained breakouts.
+        dataframe.loc[dataframe["ema50_4h"] < dataframe["ema200_4h"], "exit_long"] = 1
         return dataframe

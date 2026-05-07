@@ -64,11 +64,12 @@ class BNBMeanRevertSharp(IStrategy):
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # 1h oversold + price not catastrophically below 1d trend (avoid
-        # catching knives during regime breakdowns; ema200_1d * 0.85 gives
-        # ~15% buffer below trend for bear-but-not-collapse zones)
+        # r1: RSI<25 → RSI<30. Signal validated at <25 (all 4 regimes positive,
+        # WR 68-81%) but trade count was too low (16/25/72/115). Loosening
+        # threshold should triple trade count and lift per-regime profit
+        # toward profit_floor (20%).
         dataframe.loc[
-            (dataframe["rsi"] < 25)
+            (dataframe["rsi"] < 30)
             & (dataframe["close"] > dataframe["ema200_1d"] * 0.85),
             "enter_long",
         ] = 1
