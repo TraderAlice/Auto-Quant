@@ -68,10 +68,15 @@ Plus:
 - **v0.2.0** ([archive](versions/0.2.0/)): multi-strategy (up to 3 slots).
   5 paradigms tested / 3 kept / 0 Goodhart attempts. Peak clean Sharpe
   0.67 (~3.5× better than v0.1.0's true-edge). See [retrospective](versions/0.2.0/retrospective.md).
-- **v0.3.0** (current): multi-strategy + multi-timeframe + multi-asset
-  portfolio. Adds 4h + 1d informative data, expands universe from 2 pairs
-  to 5 (BTC/ETH/SOL/BNB/AVAX), and emits per-pair metrics alongside
-  portfolio aggregate so agents can reason about per-asset edge. In-flight.
+- **v0.3.0** ([archive](versions/0.3.0/)): multi-strategy + multi-timeframe +
+  multi-asset portfolio. Adds 4h + 1d informative data, expands universe to
+  5 pairs (BTC/ETH/SOL/BNB/AVAX), and emits per-pair metrics. **First
+  project-wide clean Sharpe > 1.0** (1.07 on BTCLeaderBreakX). Also: first
+  fork event + isolation experiment. See [retrospective](versions/0.3.0/retrospective.md).
+- **v0.4.0** (current): regime extension. Timerange 2023-2025 → 2021-2025
+  to include the 2022 bear regime. Also opens optional dynamic position
+  sizing via `custom_stake_amount`. Tests whether v0.3.0's wins were
+  bull-regime-overfit. In-flight.
 
 ## Requirements
 

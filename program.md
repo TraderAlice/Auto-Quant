@@ -1,21 +1,25 @@
-# Auto-Quant v0.3.0 — multi-strategy + multi-timeframe + multi-asset portfolio
+# Auto-Quant v0.4.0 — regime-extended portfolio with dynamic sizing
 
 This is an experiment to have the LLM do its own quantitative research across
 **multiple parallel strategies** that can combine signals across **multiple
-timeframes** (1h base + 4h + 1d) and **multiple assets** (5-pair universe with
-cross-asset signal references).
+timeframes** (1h base + 4h + 1d), **multiple assets** (5-pair universe with
+cross-asset signal references), and now **mixed-regime data** (2021-2025
+including the 2022 bear market) with **optional dynamic position sizing**.
 
-The core bet of v0.2.0 was multi-strategy: maintaining up to 3 strategies in
-parallel resisted single-paradigm anchoring. That worked — see
-`versions/0.2.0/retrospective.md`. v0.3.0 opens two new dimensions on top:
+The progression so far:
+- v0.2.0 added multi-strategy → resisted single-paradigm anchoring
+- v0.3.0 added MTF + multi-asset + per-pair reporting → hit clean Sharpe 1.07
+- **v0.4.0** extends timerange backward to include 2022 winter, AND opens
+  dynamic stake sizing via `custom_stake_amount`. v0.3.0's findings ("cross-pair
+  macro gates redundant in single-regime bull", "no bear-market validation")
+  directly motivated this version.
 
-- **Multi-timeframe**: strategies can reference 4h and 1d context via
-  FreqTrade's `@informative` decorator. v0.2.0's peak Sharpe of 0.67 was
-  constrained by 1h-only inputs.
-- **Multi-asset portfolio**: universe expands from 2 pairs (BTC, ETH) to
-  5 pairs (BTC, ETH, SOL, BNB, AVAX). `run.py` now reports **aggregate +
-  per-pair metrics** so the agent sees per-asset edge, not just the
-  portfolio aggregate that hid asset-specific behaviour in v0.2.0.
+**The v0.4.0 honesty test**: v0.3.0's three winning strategies achieved their
+peak Sharpes on a pure-bull 2023-2025 segment. Many of those wins are likely
+regime-overfit. v0.4.0 forces every strategy to face 2022 winter (BTC -75%
+peak-to-trough). Strategies that survive AND maintain edge are real;
+strategies that collapse reveal which v0.3.0 findings were regime-dependent
+artifacts.
 
 ## Setup
 
@@ -31,11 +35,15 @@ To set up a new experiment, work with the user to:
    - `run.py` — the batch backtest oracle. Do not modify.
    - `user_data/strategies/_template.py.example` — skeleton for new strategies.
      **Note:** the folder may also contain `__pycache__`; ignore it.
-   - `versions/0.1.0/retrospective.md` and `versions/0.2.0/retrospective.md`
-     — previous runs' findings. Both are valuable: v0.1.0 documents the
-     single-paradigm anchoring failure mode + 3 Goodhart exploits the agent
-     eventually rolled back. v0.2.0 documents the multi-strategy response
-     and 5 paradigms tested (3 with clean positive edge).
+   - `versions/<v>/retrospective.md` — prior runs' findings. All three
+     are valuable as design context:
+     - v0.1.0: single-paradigm anchoring + 3 Goodhart exploits agent
+       self-reversed
+     - v0.2.0: multi-strategy resolution of anchoring; 5 paradigms / 3 kept
+     - v0.3.0: MTF + portfolio + per-pair → Sharpe 1.07 clean; first fork +
+       isolation experiment; **explicitly flagged single-regime data as
+       blocking** several findings (cross-pair macro gates, bear robustness)
+       — exactly what v0.4.0 addresses.
 4. **Verify data exists**: Check that all fifteen data files exist under
    `user_data/data/` — 5 pairs × 3 timeframes:
    - `BTC_USDT-{1h,4h,1d}.feather`
@@ -73,9 +81,14 @@ Once you get confirmation, kick off the experimentation.
 ## Experimentation
 
 Each round runs a backtest on ALL active strategies on a **fixed timerange**
-(`20230101-20251231`) across the **5-pair portfolio** (BTC, ETH, SOL, BNB,
-AVAX) at 1h base. `run.py` emits one `---` summary block per strategy,
-containing both portfolio-aggregate metrics AND per-pair breakdown.
+(`20210101-20251231`, 5 years including the 2022 bear regime) across the
+**5-pair portfolio** (BTC, ETH, SOL, BNB, AVAX) at 1h base. `run.py` emits
+one `---` summary block per strategy, containing both portfolio-aggregate
+metrics AND per-pair breakdown.
+
+**Backtest time note (v0.4.0)**: 5 years × 5 pairs × 3 timeframes ≈ 1.7×
+slower than v0.3.0. Each round of 3 strategies takes roughly 5-8 minutes.
+Plan iterations accordingly — about 8-12 rounds per hour.
 
 ### What you CAN do
 
@@ -192,7 +205,46 @@ that means something on BOTH pairs), use `informative_pairs()` with a
 on 1d needs 200 daily bars = 4800 hourly bars of warmup. Starting at 250-300
 is usually safe for most MTF configurations.
 
-### Per-pair reporting (new in v0.3.0)
+### Dynamic position sizing (new in v0.4.0)
+
+By default each trade is sized at `wallet * tradable_balance_ratio /
+max_open_trades` — equal-weight across the 5-pair universe. v0.4.0 unlocks
+**dynamic per-trade sizing** via FreqTrade's `custom_stake_amount` method:
+
+```python
+def custom_stake_amount(self, pair, current_time, current_rate,
+                        proposed_stake, min_stake, max_stake,
+                        leverage, entry_tag, side, **kwargs) -> float:
+    # Return a number within [min_stake, max_stake].
+    # `proposed_stake` is the equal-weight default.
+    df, _ = self.dp.get_analyzed_dataframe(pair, self.timeframe)
+    atr_pct = df["atr"].iloc[-1] / df["close"].iloc[-1]
+    vol_target = 0.02
+    scale = min(1.0, vol_target / max(atr_pct, 1e-6))
+    return max(min_stake or 0.0, min(max_stake, proposed_stake * scale))
+```
+
+**When to use it**:
+- Vol-targeting (smaller positions on more volatile pairs/regimes)
+- Signal-strength weighting (bigger position when entry signal is stronger)
+- Regime-conditional sizing (smaller in bear, normal in bull). With v0.4.0's
+  regime-mixed timerange, this is especially relevant — equal-weight in 2022
+  winter is often a research liability.
+
+**When NOT to use it**:
+- If your paradigm doesn't have a natural sizing logic, default equal-weight
+  is fine. Forcing sizing into a strategy that doesn't need it adds noise.
+- v0.3.0's MTFTrendStack and BTCLeaderBreakX both used equal-weight default
+  and reached Sharpe > 0.7.
+
+**Honesty consideration**: in v0.4.0's regime-mixed data, sizing-aware
+strategies are likely to look better than equal-weight equivalents because
+they can de-risk in 2022. That doesn't mean sizing is "the secret sauce" —
+it means equal-weight in regime mix is structurally exposed. When comparing,
+distinguish "this strategy has real edge" from "this strategy survives
+regime mix BECAUSE it sizes down in bear".
+
+### Per-pair reporting (still as in v0.3.0)
 
 `run.py` output now includes a `per_pair:` section after the aggregate
 metrics. Example:
