@@ -21,7 +21,7 @@ File names starting with `_` are ignored by run.py — that's how this
 template stays excluded from backtests.
 
 ========================================================================
-MULTI-TIMEFRAME + CROSS-ASSET USAGE (v0.3.0)
+MULTI-TIMEFRAME + CROSS-ASSET + DYNAMIC SIZING (v0.3.0–v0.4.0)
 ========================================================================
 
 Data is pre-downloaded for three timeframes: 1h (base), 4h, and 1d.
@@ -67,6 +67,12 @@ anything else will crash with a missing-data error.
 If your strategy doesn't need MTF or cross-pair context, just delete the
 @informative methods and write a single-TF single-pair strategy; run.py
 still runs it across the 5-pair universe and reports per-pair results.
+
+Dynamic position sizing (v0.4.0): the optional `custom_stake_amount`
+method below lets your strategy decide stake per trade rather than
+relying on default equal-weight allocation. Useful for vol-targeting,
+signal-strength weighting, or regime-conditional sizing. Default is
+equal-weight if you don't implement / delete it.
 """
 
 from pandas import DataFrame
@@ -119,6 +125,45 @@ class _Template(IStrategy):
         # Typical use: regime / macro trend filter. SMA200 on 1d = "above 200-day".
         # dataframe["ema200"] = ta.EMA(dataframe, timeperiod=200)
         return dataframe
+
+    # ---- OPTIONAL: dynamic position sizing via custom_stake_amount ----
+    # Default behavior (if you DON'T implement this): each trade gets
+    # wallet * tradable_balance_ratio / max_open_trades = ~20% per trade
+    # for max_open_trades=5. Equal-weight across pairs.
+    #
+    # Implement this to control stake size per trade — useful when:
+    #   - You want vol-targeting (smaller stake on high-vol pairs)
+    #   - You want signal-strength-weighted entries
+    #   - You want regime-conditional sizing (smaller in bear)
+    # In v0.4.0+ (regime-mixed timerange), equal-weight is often a
+    # research liability — sizing-aware strategies should be more honest
+    # about their bear-regime resilience.
+    #
+    # Delete this method if you don't need it; default sizing is fine for
+    # many strategies.
+    def custom_stake_amount(
+        self,
+        pair: str,
+        current_time,
+        current_rate: float,
+        proposed_stake: float,
+        min_stake,
+        max_stake: float,
+        leverage: float,
+        entry_tag: str,
+        side: str,
+        **kwargs,
+    ) -> float:
+        # `proposed_stake` is FreqTrade's default (equal-weight per slot).
+        # Return a different value to override. Must be within [min_stake, max_stake].
+        #
+        # Example: vol-targeted (smaller positions on more volatile pairs).
+        # df, _ = self.dp.get_analyzed_dataframe(pair, self.timeframe)
+        # atr_pct = df["atr"].iloc[-1] / df["close"].iloc[-1]   # ATR as % of price
+        # vol_target = 0.02   # 2% vol target
+        # scale = min(1.0, vol_target / max(atr_pct, 1e-6))
+        # return max(min_stake or 0.0, min(max_stake, proposed_stake * scale))
+        return proposed_stake
 
     # ---- three methods every strategy must implement ----
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
