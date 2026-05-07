@@ -74,11 +74,14 @@ class CrossPairMR(IStrategy):
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         if metadata["pair"] == "BTC/USDT":
             return dataframe
-        # Alt is 2σ below its 48-hour mean ratio vs BTC, AND BTC is in a
-        # structural bull (BTC > 50d SMA on 1d). The conjunction is what
-        # v0.4.0's regime mix should let differentiate.
+        # r6: rebound-start trigger. r5 entered while ratio was still
+        # falling (DD -37%%, knives in 2022 alt cascades). Now require:
+        # prior bar z < -2 (was deeply oversold) AND current bar z is
+        # rising (z > z.shift(1)) — buy AFTER the bottom prints, not
+        # while still falling. BTC bull regime gate retained.
         dataframe.loc[
-            (dataframe["ratio_z"] < -2.0)
+            (dataframe["ratio_z"].shift(1) < -2.0)
+            & (dataframe["ratio_z"] > dataframe["ratio_z"].shift(1))
             & (dataframe["btc_usdt_close_1h"] > dataframe["btc_usdt_sma50_1d"]),
             "enter_long",
         ] = 1

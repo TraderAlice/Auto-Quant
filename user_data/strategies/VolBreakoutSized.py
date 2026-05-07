@@ -61,18 +61,13 @@ class VolBreakoutSized(IStrategy):
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # r5: volume threshold 1.3x → 1.4x. Stagnation-rule mandated touch;
-        # cautious tightening of the local-volume confirmation. v0.3.0
-        # Finding 1 (local volume on trade-pair >> signal-source volume)
-        # plus Finding 4 (volume helps less when filter stack is heavy)
-        # together suggest the sweet-spot threshold isn't critical — small
-        # bumps shouldn't move things much. This bump tests directional
-        # sensitivity on the regime-mixed data; rollback via git reset is
-        # trivial if it regresses.
+        # r6: revert volume threshold 1.4x → 1.3x. r5 bump cost 0.09 Sharpe
+        # (1.085→0.998), the -28 filtered trades were net positive. 1.3x
+        # is the local optimum — clean isolation, single-knob revert.
         dataframe.loc[
             (dataframe["close"] > dataframe["donchian_high_24"])
             & (dataframe["ema50_4h"] > dataframe["ema200_4h"])
-            & (dataframe["volume"] > 1.4 * dataframe["volume_sma20"]),
+            & (dataframe["volume"] > 1.3 * dataframe["volume_sma20"]),
             "enter_long",
         ] = 1
         return dataframe
