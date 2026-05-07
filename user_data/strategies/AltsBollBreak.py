@@ -59,6 +59,11 @@ class AltsBollBreak(IStrategy):
         dataframe["ema200"] = ta.EMA(dataframe, timeperiod=200)
         return dataframe
 
+    @informative("1d")
+    def populate_indicators_1d(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+        dataframe["ema200"] = ta.EMA(dataframe, timeperiod=200)
+        return dataframe
+
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         # r1: Bollinger upper-band single-bar trigger replaced with Donchian-48
         # sustained-break (2 consecutive closes above 48-bar prior high). The
@@ -71,11 +76,17 @@ class AltsBollBreak(IStrategy):
         # r1: 2-bar sustained break + 4h macro bull (ema50>ema200) replaces
         # ADX-only chop gate. The 4h macro filter is the load-bearing change —
         # ADX>25 fired in winter chop too, contributing to -2.33 winter sharpe.
+        # r2: add 1d close > 1d EMA200 macro-regime gate on top of 4h ema
+        # cross. r1 had winter -32% on 11 trades all losing — those were
+        # entries during 2022 with 4h ema50>ema200 momentary upticks but
+        # the 1d trend already broken down. The 1d filter cuts those
+        # structurally.
         prior_close_above = dataframe["close"].shift(1) > dataframe["donchian_high_48"].shift(1)
         dataframe.loc[
             (dataframe["close"] > dataframe["donchian_high_48"])
             & prior_close_above
             & (dataframe["ema50_4h"] > dataframe["ema200_4h"])
+            & (dataframe["close"] > dataframe["ema200_1d"])
             & (dataframe["volume"] > 1.3 * dataframe["volume_sma20"]),
             "enter_long",
         ] = 1

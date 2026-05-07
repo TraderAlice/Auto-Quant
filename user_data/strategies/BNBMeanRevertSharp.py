@@ -64,12 +64,13 @@ class BNBMeanRevertSharp(IStrategy):
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # r1: RSI<25 → RSI<30. Signal validated at <25 (all 4 regimes positive,
-        # WR 68-81%) but trade count was too low (16/25/72/115). Loosening
-        # threshold should triple trade count and lift per-regime profit
-        # toward profit_floor (20%).
+        # r2: revert r1 RSI<30 → <25. r1 found sharp signal decay across
+        # 25-30: trade count 115→192 but ALL 4 regimes flipped (bull
+        # 0.35→0.23, winter 0.23→-0.38, recovery 0.08→-0.05, full
+        # 0.13→-0.06). The RSI 25-30 zone is structurally losers on
+        # BNB. <25 is the local optimum.
         dataframe.loc[
-            (dataframe["rsi"] < 30)
+            (dataframe["rsi"] < 25)
             & (dataframe["close"] > dataframe["ema200_1d"] * 0.85),
             "enter_long",
         ] = 1

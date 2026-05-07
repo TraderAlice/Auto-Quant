@@ -64,19 +64,27 @@ class TrendRegimeFiltered(IStrategy):
     @informative("1d")
     def populate_indicators_1d(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         dataframe["ema200"] = ta.EMA(dataframe, timeperiod=200)
+        # r2: 7d slope of EMA200 (today's vs 7-bar-prior). Slope > 0 → regime
+        # is structurally improving, not just briefly poking above EMA200.
+        dataframe["ema200_slope_up"] = (
+            dataframe["ema200"] > dataframe["ema200"].shift(7)
+        ).astype(int)
         return dataframe
 
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # r1: tighten 1d regime filter from `close > EMA200_1d` to
-        # `close > EMA200_1d * 1.05` (5% buffer). r0 had 15 winter trades
-        # WR 26.7% → -6.17%; the marginal-regime entries near the EMA200
-        # crossover were the bad ones. Buffer should silence those.
+        # r2: keep 1.05× buffer + ADD 1d EMA200 slope-up. r1's buffer alone
+        # was roughly neutral (full 0.38→0.34, winter -0.31→-0.39); the
+        # missing piece is regime-direction. ema200_1d can be FALLING but
+        # price still 5% above it (e.g., bull tail before winter break).
+        # Slope-up gates entries to regimes where the 1d trend is still
+        # structurally improving.
         dataframe.loc[
             (dataframe["ema20_4h"] > dataframe["ema50_4h"])
-            & (dataframe["close"] > dataframe["ema200_1d"] * 1.05),
+            & (dataframe["close"] > dataframe["ema200_1d"] * 1.05)
+            & (dataframe["ema200_slope_up_1d"] == 1),
             "enter_long",
         ] = 1
         return dataframe
