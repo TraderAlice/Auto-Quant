@@ -50,13 +50,15 @@ class CrashRebound(IStrategy):
     # 30d at 1h = 720 bars warmup
     startup_candle_count: int = 760
 
-    # r18: expand basket SOL/AVAX/BNB → full 5-pair. Tests if the
-    # drawdown-rebound paradigm generalizes to BTC+ETH (more liquid
-    # majors with smaller % drawdowns but same mean-reverting structure).
-    # If majors per-pair Sharpes are positive too, paradigm is universal;
-    # if they drag, the strategy is alts-specific (analog to MR=BNB-specific
-    # finding).
-    pair_basket = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "AVAX/USDT"]
+    # r19: revert r18 expansion. r18 finding: full-5pair lifted full_5y
+    # Sharpe 0.29→0.40 and bull 0.85→1.07 / recovery 0.19→0.33, BUT
+    # winter regressed 0.085→0.013 (BTC/ETH winter drawdown-bounces are
+    # weaker than alts'). Net robust 0.085→0.013 — a clean Pareto move
+    # where best-case lifted but worst-case dropped. Drawdown-rebound
+    # paradigm DOES generalize to majors in directional regimes but
+    # NOT under v0.4.1 robust-sharpe honesty bar. Reverting to 3-pair
+    # alts+BNB basket which holds robust 0.085.
+    pair_basket = ["SOL/USDT", "AVAX/USDT", "BNB/USDT"]
 
     test_timeranges = [
         ("bull_2021",      "20210101-20211231"),
