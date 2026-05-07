@@ -98,11 +98,13 @@ class BNBSizedConviction(IStrategy):
         rsi_now = df["rsi"].iloc[-1]
         if rsi_now != rsi_now or rsi_now <= 0:
             return proposed_stake
-        # r16: revert r13's 3x cap to 2x. r13 finding: 3x had ZERO effect
-        # vs 2x — RSI<12.5 (where scale > 2.0) is structurally rare on
-        # BNB so the higher cap was non-binding. The 2x cap is the
-        # effective conviction ceiling for this signal/pair.
-        scale = 25.0 / max(float(rsi_now), 5.0)
+        # r17: change scaling formula 25/RSI → 1 + (25-RSI)/10. Linear
+        # scaling that hits 2x at RSI=15 (more common than the prior
+        # formula's 2x point at RSI=12.5). r13 found higher cap was
+        # non-binding because 25/RSI rarely reached 2.0; the formula
+        # change should make the cap effective.
+        rsi_val = max(float(rsi_now), 1.0)
+        scale = 1.0 + (25.0 - rsi_val) / 10.0
         scale = max(0.5, min(2.0, scale))
         stake = proposed_stake * scale
         return max(min_stake or 0.0, min(max_stake, stake))
