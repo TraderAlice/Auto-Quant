@@ -49,9 +49,10 @@ class BTCLeaderBreakV4(IStrategy):
 
     @informative("4h", "BTC/USDT")
     def populate_indicators_btc_4h(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Donchian-15 high on prior 15 4h bars (excl. current to avoid
-        # self-reference at break detection).
-        dataframe["donchian_high_15"] = dataframe["high"].rolling(15).max().shift(1)
+        # r9: Donchian-10 (was 15). v0.3.0's terminal optimum on this knob
+        # was 10 (sequential 20→15→13→10 each tightening helped). Tighter
+        # channel = breaks are higher-signal events.
+        dataframe["donchian_high_10"] = dataframe["high"].rolling(10).max().shift(1)
         dataframe["ema50"] = ta.EMA(dataframe, timeperiod=50)
         dataframe["ema200"] = ta.EMA(dataframe, timeperiod=200)
         return dataframe
@@ -74,7 +75,7 @@ class BTCLeaderBreakV4(IStrategy):
         # AND local-pair 1h volume confirmation (v0.3.0 Finding 1: local
         # volume on trade pair >> signal-source volume).
         dataframe.loc[
-            (dataframe["btc_usdt_close_4h"] > dataframe["btc_usdt_donchian_high_15_4h"])
+            (dataframe["btc_usdt_close_4h"] > dataframe["btc_usdt_donchian_high_10_4h"])
             & (dataframe["btc_usdt_ema50_4h"] > dataframe["btc_usdt_ema200_4h"])
             & (dataframe["volume"] > 1.3 * dataframe["volume_sma20"]),
             "enter_long",
