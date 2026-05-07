@@ -34,11 +34,12 @@ class MeanRevRSIDip(IStrategy):
     can_short = False
 
     minimal_roi = {"0": 100}
-    # r3: hard stoploss to cap 2022 catch-the-knife losses. RSI<28 dip-buys
-    # in deep bear cascades that don't bounce drag DD to -22%; -7% stop
-    # cuts those before they compound. Risk: realizes losses on positions
-    # that would have eventually recovered. Net effect to be measured.
-    stoploss = -0.07
+    # r3 added stoploss=-0.07; r4 reverts to -0.99 — stop realized losses
+    # on dips that would have recovered (Sharpe 0.03→-0.22). MR entries
+    # are structurally meant to be temporarily underwater; stops fight
+    # the paradigm. Defense against bear is now structural via stricter
+    # regime gate (SMA100 1d), not stoploss.
+    stoploss = -0.99
     trailing_stop = False
     process_only_new_candles = True
     use_exit_signal = True
@@ -55,7 +56,10 @@ class MeanRevRSIDip(IStrategy):
 
     @informative("1d")
     def populate_indicators_1d(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        dataframe["sma50"] = ta.SMA(dataframe, timeperiod=50)
+        # r4: SMA50 → SMA100 — stricter regime gate to STRUCTURALLY exclude
+        # 2022-style bear conditions from the dip-buy universe instead of
+        # sizing through them.
+        dataframe["sma100"] = ta.SMA(dataframe, timeperiod=100)
         return dataframe
 
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
@@ -65,7 +69,7 @@ class MeanRevRSIDip(IStrategy):
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         dataframe.loc[
             (dataframe["rsi"] < 28)
-            & (dataframe["close"] > dataframe["sma50_1d"]),
+            & (dataframe["close"] > dataframe["sma100_1d"]),
             "enter_long",
         ] = 1
         return dataframe

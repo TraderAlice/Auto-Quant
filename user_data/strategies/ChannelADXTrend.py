@@ -57,14 +57,15 @@ class ChannelADXTrend(IStrategy):
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # r3 pivot: continuation-style entry (NOT pullback). r2 found
-        # WR stuck at 18% with pullback-reclaim — in trending markets
-        # brief EMA50 touches are stop-runs, not buy zones. Now: enter on
-        # 5-bar high break while above EMA50, with full MTF trend gating.
+        # r3: 5-bar-high continuation lifted Sharpe -0.37→+0.06 but per-pair
+        # showed BNB/AVAX still negative. r4: add rising-ADX acceleration
+        # filter — only enter when 4h ADX is INCREASING (trend strengthening),
+        # which should skip fading-trend continuation traps.
         dataframe["high_5"] = dataframe["high"].rolling(5).max().shift(1)
         dataframe.loc[
             (dataframe["close"] > dataframe["sma100_1d"])
             & (dataframe["adx_4h"] > 25)
+            & (dataframe["adx_4h"] > dataframe["adx_4h"].shift(4))
             & (dataframe["ema20_4h"] > dataframe["ema50_4h"])
             & (dataframe["close"] > dataframe["ema50"])
             & (dataframe["close"] > dataframe["high_5"]),
