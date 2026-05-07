@@ -98,13 +98,14 @@ class BNBSizedConviction(IStrategy):
         rsi_now = df["rsi"].iloc[-1]
         if rsi_now != rsi_now or rsi_now <= 0:
             return proposed_stake
-        # r17: change scaling formula 25/RSI → 1 + (25-RSI)/10. Linear
-        # scaling that hits 2x at RSI=15 (more common than the prior
-        # formula's 2x point at RSI=12.5). r13 found higher cap was
-        # non-binding because 25/RSI rarely reached 2.0; the formula
-        # change should make the cap effective.
-        rsi_val = max(float(rsi_now), 1.0)
-        scale = 1.0 + (25.0 - rsi_val) / 10.0
+        # r18: revert r17 linear scaling (1+(25-RSI)/10) back to 25/RSI.
+        # r17 was a clean Pareto MOVE: linear scaled positions more
+        # aggressively (avg_pos 21.98→24.18%) but robust_sharpe dropped
+        # 0.098→0.095 because DD widened proportionally without lifting
+        # Sharpe-numerator equally. r9 baseline (25/RSI) was the Pareto
+        # optimum for this signal. r17's row is now Pareto-dominated_by
+        # r9 — clean instance of "more sizing != better robust".
+        scale = 25.0 / max(float(rsi_now), 5.0)
         scale = max(0.5, min(2.0, scale))
         stake = proposed_stake * scale
         return max(min_stake or 0.0, min(max_stake, stake))

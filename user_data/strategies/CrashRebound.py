@@ -50,7 +50,13 @@ class CrashRebound(IStrategy):
     # 30d at 1h = 720 bars warmup
     startup_candle_count: int = 760
 
-    pair_basket = ["SOL/USDT", "AVAX/USDT", "BNB/USDT"]
+    # r18: expand basket SOL/AVAX/BNB → full 5-pair. Tests if the
+    # drawdown-rebound paradigm generalizes to BTC+ETH (more liquid
+    # majors with smaller % drawdowns but same mean-reverting structure).
+    # If majors per-pair Sharpes are positive too, paradigm is universal;
+    # if they drag, the strategy is alts-specific (analog to MR=BNB-specific
+    # finding).
+    pair_basket = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "AVAX/USDT"]
 
     test_timeranges = [
         ("bull_2021",      "20210101-20211231"),

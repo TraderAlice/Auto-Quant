@@ -50,7 +50,11 @@ class PerPairMR(IStrategy):
 
     startup_candle_count: int = 250
 
-    pair_basket = ["BNB/USDT", "SOL/USDT", "AVAX/USDT"]
+    # r18: expand to full 5-pair. BTC+ETH branches use Donchian-48 sustained
+    # break + 4h macro filter (transfer of AltsBollBreak r1 finding) since
+    # majors don't have the same MR profile. This makes the strategy
+    # paradigm-mixed AND universe-conditional simultaneously.
+    pair_basket = ["BTC/USDT", "ETH/USDT", "BNB/USDT", "SOL/USDT", "AVAX/USDT"]
 
     test_timeranges = [
         ("bull_2021",      "20210101-20211231"),
@@ -76,7 +80,8 @@ class PerPairMR(IStrategy):
         return dataframe
 
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Both branches need RSI; alts also need Bollinger.
+        # All branches need RSI; alts also need Bollinger; majors need
+        # Donchian-48 + volume.
         dataframe["rsi"] = ta.RSI(dataframe, timeperiod=14)
         bb_period = 20
         bb_std = 2.0
@@ -84,27 +89,41 @@ class PerPairMR(IStrategy):
         std = dataframe["close"].rolling(bb_period).std()
         dataframe["bb_lower"] = sma - bb_std * std
         dataframe["bb_mid"] = sma
+        dataframe["donchian_high_48"] = dataframe["high"].rolling(48).max().shift(1)
+        dataframe["sma50"] = ta.SMA(dataframe, timeperiod=50)
+        dataframe["volume_sma20"] = dataframe["volume"].rolling(20).mean()
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         pair = metadata.get("pair", "")
         if pair == "BNB/USDT":
-            # BNB-RSI mechanism (r0 winning configuration):
+            # BNB-RSI mechanism:
             dataframe.loc[
                 (dataframe["rsi"] < 25)
                 & (dataframe["close"] > dataframe["ema200_1d"] * 0.85),
                 "enter_long",
             ] = 1
         elif pair in ("SOL/USDT", "AVAX/USDT"):
-            # r14: r13 baseline had recovery alts SOL -0.14 / AVAX -0.05 —
-            # BB-lower mechanism doesn't work in sideways regime. ADD 4h
-            # ema50>ema200 to require 4h-level uptrend, not just 1d-level.
+            # Alts BB-lower MR with full regime gate.
             dataframe.loc[
                 (dataframe["close"] < dataframe["bb_lower"])
                 & (dataframe["rsi"] < 35)
                 & (dataframe["ema200_slope_up_1d"] == 1)
                 & (dataframe["close"] > dataframe["ema200_1d"])
                 & (dataframe["ema50_4h"] > dataframe["ema200_4h"]),
+                "enter_long",
+            ] = 1
+        elif pair in ("BTC/USDT", "ETH/USDT"):
+            # r18: majors Donchian-48 sustained break + 4h macro + volume.
+            # Different paradigm (breakout, not MR) for majors which have
+            # smaller MR opportunity space. Strategy now paradigm-conditional.
+            prior_above = dataframe["close"].shift(1) > dataframe["donchian_high_48"].shift(1)
+            dataframe.loc[
+                (dataframe["close"] > dataframe["donchian_high_48"])
+                & prior_above
+                & (dataframe["ema50_4h"] > dataframe["ema200_4h"])
+                & (dataframe["ema200_slope_up_1d"] == 1)
+                & (dataframe["volume"] > 1.3 * dataframe["volume_sma20"]),
                 "enter_long",
             ] = 1
         return dataframe
@@ -115,4 +134,8 @@ class PerPairMR(IStrategy):
             dataframe.loc[dataframe["rsi"] > 55, "exit_long"] = 1
         elif pair in ("SOL/USDT", "AVAX/USDT"):
             dataframe.loc[dataframe["close"] > dataframe["bb_mid"], "exit_long"] = 1
+        elif pair in ("BTC/USDT", "ETH/USDT"):
+            # Majors patient SMA50 exit (paradigm-specific from
+            # AltsBollBreak r1 finding — breakouts ride trends).
+            dataframe.loc[dataframe["close"] < dataframe["sma50"], "exit_long"] = 1
         return dataframe
