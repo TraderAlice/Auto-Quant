@@ -39,7 +39,7 @@ PROJECT_DIR = Path(__file__).parent.resolve()
 USER_DATA = PROJECT_DIR / "user_data"
 STRATEGIES_DIR = USER_DATA / "strategies"
 CONFIG = PROJECT_DIR / "config.json"
-TIMERANGE = "20230101-20251231"
+TIMERANGE = "20210101-20251231"
 PAIRS = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "AVAX/USDT"]
 PAIRS_STR = ",".join(PAIRS)
 
