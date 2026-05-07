@@ -30,7 +30,7 @@ Uses MTF: no (1h-only on entry/exit; 30d max needs 720 bars warmup)
 from pandas import DataFrame
 import talib.abstract as ta
 
-from freqtrade.strategy import IStrategy
+from freqtrade.strategy import IStrategy, informative
 
 
 class CrashRebound(IStrategy):
@@ -59,6 +59,14 @@ class CrashRebound(IStrategy):
         ("full_5y",        "20210101-20251231"),
     ]
 
+    @informative("1d")
+    def populate_indicators_1d(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+        dataframe["ema200"] = ta.EMA(dataframe, timeperiod=200)
+        dataframe["ema200_slope_up"] = (
+            dataframe["ema200"] > dataframe["ema200"].shift(7)
+        ).astype(int)
+        return dataframe
+
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         # 30-day rolling high (720 1h bars). Drawdown trigger uses prior bar
         # to avoid current-bar self-reference.
@@ -71,11 +79,16 @@ class CrashRebound(IStrategy):
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # -25% from 30d high + RSI oversold confirmation (don't catch knives
-        # mid-fall, wait for the stretch).
+        # r6: ADD 1d EMA200 slope-up filter (winter defense). r5 baseline
+        # had bull 0.82/+31% but winter -0.84/-21.8% on 145 trades — winter
+        # bounces too small to outpace continuation drops. Slope-up gates
+        # entries to regimes where the 1d trend is structurally improving;
+        # should silence most of 2022 winter while preserving the bull/
+        # recovery edge.
         dataframe.loc[
             (dataframe["drawdown_pct"] < -0.25)
-            & (dataframe["rsi"] < 35),
+            & (dataframe["rsi"] < 35)
+            & (dataframe["ema200_slope_up_1d"] == 1),
             "enter_long",
         ] = 1
         return dataframe
