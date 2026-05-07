@@ -108,10 +108,9 @@ class VolBreakoutSized(IStrategy):
         atr_pct = df["atr_pct_4h"].iloc[-1]
         if atr_pct != atr_pct or atr_pct <= 0:
             return proposed_stake
-        # r17: vol_target 0.020 → 0.015 (continue tightening trend).
-        # r16's 0.025→0.020 lifted Sharpe to project-record 1.155;
-        # test if there's more gas in even tighter de-risking.
-        vol_target = 0.015
+        # r18: vol_target 0.015 → 0.010 (continue tightening). r17 lifted
+        # Sharpe to 1.193 record — test if curve still climbs or peaks here.
+        vol_target = 0.010
         scale = min(1.0, vol_target / atr_pct)
         stake = proposed_stake * scale
         return max(min_stake or 0.0, min(max_stake, stake))
