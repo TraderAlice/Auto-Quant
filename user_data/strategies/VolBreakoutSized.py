@@ -60,10 +60,9 @@ class VolBreakoutSized(IStrategy):
         # Per-pair Donchian-24 prior-bar high (exclude current bar to avoid
         # self-reference at break detection)
         dataframe["donchian_high_24"] = dataframe["high"].rolling(24).max().shift(1)
-        # r11: SMA30→SMA50 exit. Transfers v0.3.0 BTCLeaderBreakX terminal
-        # finding (SMA50 > SMA20 > faster); 30 was an interpolated guess.
-        # Patient ride-the-move exit per v0.3.0 Finding 2.
-        dataframe["sma50"] = ta.SMA(dataframe, timeperiod=50)
+        # r14: SMA50→SMA75 (mirrors V4's r13 win — patient-exit trend has
+        # more gas than v0.3.0's terminal SMA50 in regime-mixed data).
+        dataframe["sma75"] = ta.SMA(dataframe, timeperiod=75)
         dataframe["volume_sma20"] = dataframe["volume"].rolling(20).mean()
         return dataframe
 
@@ -82,7 +81,7 @@ class VolBreakoutSized(IStrategy):
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         # Patient ride-the-move exit (v0.3.0 Finding 2: breakouts benefit
         # from slow-SMA exits, not responsive ones)
-        dataframe.loc[dataframe["close"] < dataframe["sma50"], "exit_long"] = 1
+        dataframe.loc[dataframe["close"] < dataframe["sma75"], "exit_long"] = 1
         return dataframe
 
     def custom_stake_amount(
