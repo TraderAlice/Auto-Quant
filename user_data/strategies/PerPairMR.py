@@ -59,6 +59,14 @@ class PerPairMR(IStrategy):
         ("full_5y",        "20210101-20251231"),
     ]
 
+    @informative("4h")
+    def populate_indicators_4h(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+        # r14: 4h trend filter for alts branch — kills sideways-recovery
+        # entries that were SOL -0.14, AVAX -0.05.
+        dataframe["ema50"] = ta.EMA(dataframe, timeperiod=50)
+        dataframe["ema200"] = ta.EMA(dataframe, timeperiod=200)
+        return dataframe
+
     @informative("1d")
     def populate_indicators_1d(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         dataframe["ema200"] = ta.EMA(dataframe, timeperiod=200)
@@ -88,13 +96,15 @@ class PerPairMR(IStrategy):
                 "enter_long",
             ] = 1
         elif pair in ("SOL/USDT", "AVAX/USDT"):
-            # Alts-BB-lower mechanism (r10 bull-strong configuration)
-            # with full regime gate (slope-up + close>EMA200).
+            # r14: r13 baseline had recovery alts SOL -0.14 / AVAX -0.05 —
+            # BB-lower mechanism doesn't work in sideways regime. ADD 4h
+            # ema50>ema200 to require 4h-level uptrend, not just 1d-level.
             dataframe.loc[
                 (dataframe["close"] < dataframe["bb_lower"])
                 & (dataframe["rsi"] < 35)
                 & (dataframe["ema200_slope_up_1d"] == 1)
-                & (dataframe["close"] > dataframe["ema200_1d"]),
+                & (dataframe["close"] > dataframe["ema200_1d"])
+                & (dataframe["ema50_4h"] > dataframe["ema200_4h"]),
                 "enter_long",
             ] = 1
         return dataframe

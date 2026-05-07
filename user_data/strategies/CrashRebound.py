@@ -75,9 +75,10 @@ class CrashRebound(IStrategy):
             dataframe["close"] / dataframe["high_30d"] - 1.0
         )
         dataframe["rsi"] = ta.RSI(dataframe, timeperiod=14)
-        dataframe["sma50"] = ta.SMA(dataframe, timeperiod=50)
-        # r10: volume SMA20 for entry confirmation. Filters low-quality
-        # bounces (capitulation rebounds need volume to be real).
+        # r14: SMA100 for patient exit (replaces SMA50 — v0.4.0 r13 found
+        # regime-mix prefers patient exits, transferring here from
+        # CrashRebound r10 baseline).
+        dataframe["sma100"] = ta.SMA(dataframe, timeperiod=100)
         dataframe["volume_sma20"] = dataframe["volume"].rolling(20).mean()
         return dataframe
 
@@ -97,6 +98,8 @@ class CrashRebound(IStrategy):
         return dataframe
 
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Mean-reversion target: above 1h SMA50 = halfway back to prior trend.
-        dataframe.loc[dataframe["close"] > dataframe["sma50"], "exit_long"] = 1
+        # r14: SMA50 → SMA100 patient exit. v0.4.0 r13: regime-mix prefers
+        # patient over fast. Strategy WR is 70% — winners > losers, so
+        # extending winner runtime usually helps slightly.
+        dataframe.loc[dataframe["close"] > dataframe["sma100"], "exit_long"] = 1
         return dataframe
