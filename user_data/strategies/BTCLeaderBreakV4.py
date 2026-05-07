@@ -65,7 +65,10 @@ class BTCLeaderBreakV4(IStrategy):
         return dataframe
 
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        dataframe["sma50"] = ta.SMA(dataframe, timeperiod=50)
+        # r13: SMA50→SMA75 exit. Mirrors VolSized's r11 successful patient-exit
+        # extension. v0.3.0 BTCLeaderBreakX terminated at SMA50, but Vol's
+        # r11 30→50 win suggests the patient-exit trend has more to give.
+        dataframe["sma75"] = ta.SMA(dataframe, timeperiod=75)
         dataframe["volume_sma20"] = dataframe["volume"].rolling(20).mean()
         return dataframe
 
@@ -85,7 +88,7 @@ class BTCLeaderBreakV4(IStrategy):
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         # SMA50 patient ride-the-move exit (v0.3.0 Finding 2 — breakouts
         # benefit from slow exits, not responsive ones).
-        dataframe.loc[dataframe["close"] < dataframe["sma50"], "exit_long"] = 1
+        dataframe.loc[dataframe["close"] < dataframe["sma75"], "exit_long"] = 1
         return dataframe
 
     def custom_stake_amount(
