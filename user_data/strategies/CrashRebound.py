@@ -75,10 +75,12 @@ class CrashRebound(IStrategy):
             dataframe["close"] / dataframe["high_30d"] - 1.0
         )
         dataframe["rsi"] = ta.RSI(dataframe, timeperiod=14)
-        # r14: SMA100 for patient exit (replaces SMA50 — v0.4.0 r13 found
-        # regime-mix prefers patient exits, transferring here from
-        # CrashRebound r10 baseline).
-        dataframe["sma100"] = ta.SMA(dataframe, timeperiod=100)
+        # r15: revert r14 SMA100 → SMA50. Patient exit BACKFIRED on this
+        # paradigm — drawdown-rebounds revert quickly; letting the bounce
+        # ride past SMA50 to SMA100 turns winners into losers. v0.4.0 r13
+        # patient-exit finding is paradigm-specific to BREAKOUTS, not
+        # counter-trend MR. Cross-version finding.
+        dataframe["sma50"] = ta.SMA(dataframe, timeperiod=50)
         dataframe["volume_sma20"] = dataframe["volume"].rolling(20).mean()
         return dataframe
 
@@ -98,8 +100,6 @@ class CrashRebound(IStrategy):
         return dataframe
 
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # r14: SMA50 → SMA100 patient exit. v0.4.0 r13: regime-mix prefers
-        # patient over fast. Strategy WR is 70% — winners > losers, so
-        # extending winner runtime usually helps slightly.
-        dataframe.loc[dataframe["close"] > dataframe["sma100"], "exit_long"] = 1
+        # r15: revert r14 SMA100 → SMA50.
+        dataframe.loc[dataframe["close"] > dataframe["sma50"], "exit_long"] = 1
         return dataframe
