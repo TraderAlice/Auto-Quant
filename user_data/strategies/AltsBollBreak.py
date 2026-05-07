@@ -37,12 +37,12 @@ class AltsBollBreak(IStrategy):
     can_short = False
 
     minimal_roi = {"0": 100}
-    # r3: hard 10% stoploss as winter defense. r1+r2 winter losers averaged
-    # ~3% each and stacked to -32%/-17% portfolio. Capping each at 10% lets
-    # genuine bull-trade volatility breathe while preventing the winter-tail
-    # hemorrhage. Replaces the r2 1d filter approach (which suppressed bull
-    # profit too heavily).
-    stoploss = -0.10
+    # r4: revert r3 stoploss=-0.10. r3 found stoploss was DUAL-Pareto: tighter
+    # losses → smaller std → giant negative winter Sharpe (-1.18→-3.82) even
+    # though full_5y profit improved (+894%→+1067%). Wrong tool for Sharpe-
+    # robust defense — back to no-stop, defending winter via slope filter
+    # below.
+    stoploss = -0.99
     trailing_stop = False
     process_only_new_candles = True
     use_exit_signal = True
@@ -64,6 +64,18 @@ class AltsBollBreak(IStrategy):
         dataframe["ema200"] = ta.EMA(dataframe, timeperiod=200)
         return dataframe
 
+    @informative("1d")
+    def populate_indicators_1d(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+        # r4: 1d EMA200 slope (today vs 7-bar-prior). Slope > 0 → 1d trend
+        # is structurally improving, regardless of price's instantaneous
+        # position. Targets the winter defense gap r2's instant-position
+        # filter missed.
+        dataframe["ema200"] = ta.EMA(dataframe, timeperiod=200)
+        dataframe["ema200_slope_up"] = (
+            dataframe["ema200"] > dataframe["ema200"].shift(7)
+        ).astype(int)
+        return dataframe
+
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         # r1: Bollinger upper-band single-bar trigger replaced with Donchian-48
         # sustained-break (2 consecutive closes above 48-bar prior high). The
@@ -76,14 +88,17 @@ class AltsBollBreak(IStrategy):
         # r1: 2-bar sustained break + 4h macro bull (ema50>ema200) replaces
         # ADX-only chop gate. The 4h macro filter is the load-bearing change —
         # ADX>25 fired in winter chop too, contributing to -2.33 winter sharpe.
-        # r3: revert r2 1d filter; the 10% stoploss above replaces it as
-        # the winter defense. Entry is r1's structure: 2-bar Donchian-48
-        # break + 4h macro + volume.
+        # r4: 2-bar Donchian-48 break + 4h ema50>ema200 macro + 1d EMA200
+        # slope-up. Slope-up is the new winter defense (replacing r3
+        # stoploss). 1d slope encodes regime trajectory, not instant
+        # position — should silence winter where 1d EMA200 is flat/down,
+        # while preserving bull entries where 1d slope is climbing.
         prior_close_above = dataframe["close"].shift(1) > dataframe["donchian_high_48"].shift(1)
         dataframe.loc[
             (dataframe["close"] > dataframe["donchian_high_48"])
             & prior_close_above
             & (dataframe["ema50_4h"] > dataframe["ema200_4h"])
+            & (dataframe["ema200_slope_up_1d"] == 1)
             & (dataframe["volume"] > 1.3 * dataframe["volume_sma20"]),
             "enter_long",
         ] = 1
