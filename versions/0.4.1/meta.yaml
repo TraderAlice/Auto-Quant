@@ -1,0 +1,615 @@
+version: 0.4.1
+title: pair_basket + multi-timerange + BaH + multi-objective gates — first regime-robust portfolio
+date_started: 2026-05-08
+date_completed: 2026-05-08
+branch: autoresearch/may7-2026
+git_tag: v0.4.1
+peak_commit: ebe3254  # round 29 FINAL state — agent self-stopped with all 3 strategies marked "FINAL"
+robust_peak_alive_commit: f53740b  # round 26 — RegimeAdaptiveBNB compose-sizing peak (robust 0.0967), highest among alive
+robust_peak_ever_commit: 021e120   # round 9 — BNBSizedConviction (robust 0.0980), Pareto-frontier reference, killed r22
+
+intervention:
+  summary: |
+    Four affordances bundled on top of v0.4.0:
+    (1) Strategy-declared portfolio (`pair_basket` class attr): strategies pick
+        which subset of the 5-pair whitelist to trade rather than being forced
+        through all 5. Lets BNB-skewed paradigms cleanly isolate their alpha.
+    (2) Multi-timerange testing (`test_timeranges` class attr): each strategy
+        backtested across multiple regime segments per round (default
+        bull_2021 / winter_2022 / recovery_23-25 / full_5y). Headline metric is
+        `robust_sharpe = min(sharpe across declared timeranges)`.
+    (3) Buy-and-hold benchmark per timerange: `run.py` computes equal-weight
+        portfolio BaH metrics for each strategy's basket and emits them
+        alongside strategy results. Permanent context anchor.
+    (4) Multi-objective gates flanking robust_sharpe:
+        - `profit_floor` (≥ 20% per timerange)
+        - `min_position_size` (avg ≥ 5% wallet)
+        - `pareto_dominated_by` (auto-detect dominance against any prior
+          results.tsv row with sharpe ≥ AND max_dd ≥)
+        Gates emitted in SUMMARY block; agent decides keep/kill informed by
+        gate status, not bound by it.
+  vs_v0_4_0: |
+    v0.4.0 surfaced "Sharpe-as-single-oracle has a degeneracy boundary" via
+    the vol_target Pareto walk (Sharpe 1.122 → 1.339, profit 232% → 25%).
+    v0.4.1's multi-objective gates + robust_sharpe are direct structural
+    response: tightening one knob can no longer climb the headline metric
+    without simultaneously failing flanking gates AND being Pareto-dominated
+    by historical reference.
+
+asset:
+  pairs: [BTC/USDT, ETH/USDT, SOL/USDT, BNB/USDT, AVAX/USDT]
+  timeframes_base: 1h
+  timeframes_informative: [4h, 1d]
+  timerange: 20210101-20251231
+  test_timeranges:
+    - {label: bull_2021, range: "20210101-20211231"}
+    - {label: winter_2022, range: "20220101-20221231"}
+    - {label: recovery_23_25, range: "20230101-20251231"}
+    - {label: full_5y, range: "20210101-20251231"}
+  exchange: binance
+  regimes_covered: [2021_bull, 2022_winter, 2023_2025_recovery]
+
+experiments:
+  rounds: 30  # agent self-stopped at r29, all 3 strategies marked "FINAL" voluntarily
+  total_events: 98  # 99 lines incl. header
+  events_by_type:
+    create: 12
+    evolve: 41
+    fork: 1   # r6 BNBMeanRevertSharp → BNBMeanRevertMulti (full-5pair MR ablation)
+    kill: 9   # ALL explicit kills logged — bookkeeping drift from v0.4.0 resolved
+    stable: 35
+  strategies_ever_created: 12
+  strategies_alive_at_end: 3
+  paradigms_tested: 8  # BB-breakout-alts, RSI-MR-BNB, trend, drawdown-rebound,
+                       # cross-pair-MR (BNBMulti), cross-pair-breakout (BTCLeader),
+                       # BB-lower-MR-alts, paradigm-conditional (PerPairMR),
+                       # cross-pair-ratio-MR (CrossPairRatio),
+                       # momentum-with-gold-filters (MomentumGoldFilters)
+  paradigms_with_robust_positive: 3  # all 3 alive at end
+  paradigms_killed_after_test: 6     # AltsBollBreak r5, TrendRegimeFiltered r6,
+                                     # BNBMeanRevertMulti r7, MajorsBTCLeader r9,
+                                     # AltsBollLowerMR r13, CrossPairRatio r23,
+                                     # MomentumGoldFilters r25
+                                     # (BNBMeanRevertSharp r10 + BNBSizedConviction r22
+                                     #  killed for slot freeing, mechanisms preserved)
+
+# IMPORTANT: v0.4.1 has NO "Sharpe peak" in the v0.4.0 sense — robust_sharpe ≠ single-timerange Sharpe.
+# The relevant peaks are different in kind.
+peaks:
+  robust_peak_alive_at_end:  # highest robust_sharpe among the 3 FINAL strategies
+    commit: f53740b
+    round: 26
+    strategy: RegimeAdaptiveBNB
+    robust_sharpe: 0.0967
+    binding_regime: recovery_23_25
+    full_5y_sharpe: 0.1380
+    full_5y_profit_pct: 16.41
+    max_dd_pct: -4.67
+    note: |
+      RegimeAdaptiveBNB at r26 — multiplicatively composed regime sizing
+      (bull 1.5x / neutral 1.0 / winter 0.5x) × RSI-depth conviction sizing.
+      Reaches Pareto-equality with BNBSizedConviction r9 at higher avg
+      position size (31.16% vs 21.98%) and slightly higher DD (-4.67 vs
+      -3.75). The two share the same robust ceiling (~0.097) by different
+      mechanisms — first cross-paradigm-internal Pareto-equal pair in
+      the project.
+  robust_peak_ever:  # highest robust_sharpe ever observed in this run
+    commit: 021e120
+    round: 9
+    strategy: BNBSizedConviction
+    robust_sharpe: 0.0980
+    binding_regime: recovery_23_25
+    full_5y_sharpe: 0.1390
+    full_5y_profit_pct: 12.46
+    max_dd_pct: -3.75
+    note: |
+      Created r9 as RSI-depth conviction sizing ablation of BNBMeanRevertSharp
+      (r0 baseline robust 0.0789). Identical 115 trades, identical WR 69.6% —
+      sizing redistribution alone lifted robust 0.0789 → 0.0980. Killed r22
+      (slot freed for new paradigm experiments after parent BNB was killed
+      r10); mechanism preserved in PerPairMR's BNB-RSI branch and in
+      RegimeAdaptiveBNB's RSI-conviction layer. The r9 row remains the
+      Pareto-frontier reference — none of the 20 subsequent rounds produced
+      a strategy that strictly dominates it.
+  pareto_frontier_within_run:  # admissible Pareto frontier from results.tsv at run-end
+    - {commit: edf1687, round: 0,  strategy: BNBMeanRevertSharp, robust_sharpe: 0.0789, dd: -3.10}
+    - {commit: 021e120, round: 9,  strategy: BNBSizedConviction, robust_sharpe: 0.0980, dd: -3.75}
+
+final_portfolio:
+  - name: CrashRebound
+    paradigm: drawdown-rebound (counter-trend MR family)
+    pair_basket: [SOL/USDT, AVAX/USDT, BNB/USDT]
+    robust_sharpe: 0.0847
+    binding_regime: winter_2022
+    full_5y_sharpe: 0.2903
+    full_5y_profit_pct: 55.69
+    max_dd_pct: -11.31
+    avg_position_pct: 29.60
+    profit_floor: FAIL  # winter +2.99% < 20%
+    min_position_size: PASS  # 29.60% >> 5%
+    pareto_dominated_by: 021e120:BNBSizedConviction
+    status: alive, FINAL r29
+    key_structure: |
+      DD<-20% trigger + RSI<35 confirm + volume gate + DD-depth conviction
+      sizing (scale = clamp(|dd|/0.20, 0.5, 2.0)). Volume gate is the
+      v0.2.0-discovered "first gold filter" — confirmed working here for
+      capitulation paradigm specifically (NOT generic, see Findings).
+      DD-depth sizing produced 37% lift on robust (r16: 0.062 → 0.085).
+  - name: PerPairMR
+    paradigm: paradigm-conditional (BNB→RSI-MR / SOL+AVAX→BB-MR / BTC+ETH→Donchian-breakout)
+    pair_basket: [BTC/USDT, ETH/USDT, SOL/USDT, AVAX/USDT, BNB/USDT]
+    robust_sharpe: 0.0520
+    binding_regime: winter_2022
+    full_5y_sharpe: 0.3512
+    full_5y_profit_pct: 35.78
+    max_dd_pct: -14.55
+    avg_position_pct: 22.42
+    profit_floor: FAIL  # winter +0.84% < 20%
+    min_position_size: PASS  # 22.42% > 5%
+    pareto_dominated_by: edf1687:BNBMeanRevertSharp
+    status: alive, FINAL r29
+    key_structure: |
+      First multi-paradigm-per-pair strategy in the project. Each pair routed
+      to a different paradigm based on what works for that pair's behavior.
+      Trade count 519 (highest of FINAL three). 4h ema50>ema200 trend gate
+      on alts branch is the second-most-cited finding of v0.4.1: r14 lift
+      took winter -0.11 → +0.05 (positive flip), recovery -0.10 → +0.11.
+      Agent named this "second gold filter (volume was first)".
+  - name: RegimeAdaptiveBNB
+    paradigm: BNB RSI-MR with composed sizing
+    pair_basket: [BNB/USDT]
+    robust_sharpe: 0.0967
+    binding_regime: recovery_23_25
+    full_5y_sharpe: 0.1380
+    full_5y_profit_pct: 16.41
+    max_dd_pct: -4.67
+    avg_position_pct: 31.16
+    profit_floor: FAIL  # winter +3.71% < 20%
+    min_position_size: PASS  # 31.16% > 5%
+    pareto_dominated_by: 021e120:BNBSizedConviction
+    status: alive, FINAL r29 (highest robust among alive)
+    key_structure: |
+      BNB-only RSI<25 entry + 1d-EMA200*0.85 regime gate, with
+      multiplicatively composed sizing: regime detection (bull 1.5x /
+      neutral 1.0 / winter 0.5x) × RSI-depth conviction sizing
+      (clamp(25/RSI, 0.5, 2.0)). r25 introduced regime-only sizing;
+      r26 composed. Recovery sharpe 0.075 → 0.097 from composition.
+      Pareto-equal to BNBSizedConviction r9 by different sizing path.
+
+killed_strategies:
+  - name: AltsBollBreak
+    paradigm: alts Bollinger-upper / Donchian-48-sustained breakout
+    killed_at_round: 5
+    kill_reason: structural_winter_exposure  # 4 evolves, no winter-positive robust
+  - name: TrendRegimeFiltered
+    paradigm: 4h ema-cross trend
+    killed_at_round: 6
+    kill_reason: paradigm_cap_at_0_4_with_negative_winter  # cross-version cap candidate
+  - name: BNBMeanRevertMulti
+    paradigm: BNB RSI MR extended to full 5-pair (cross-pair MR ablation)
+    killed_at_round: 7
+    kill_reason: confirms_BNB_specificity  # BNB +0.15 / AVAX +0.02 / BTC -0.14 / ETH -0.18 / SOL -0.09
+  - name: MajorsBTCLeader
+    paradigm: cross-pair Donchian-leader breakout (v0.3.0 BTCLeaderBreakX paradigm)
+    killed_at_round: 9
+    kill_reason: paradigm_cap_under_robust_sharpe  # v0.3.0 1.07 + v0.4.0 0.79 → v0.4.1 -0.17 robust
+  - name: BNBMeanRevertSharp
+    paradigm: BNB RSI<25 MR (parent of BNBSizedConviction)
+    killed_at_round: 10
+    kill_reason: child_dominates  # BNBSized robust 0.098 vs parent 0.079 — slot freed
+  - name: AltsBollLowerMR
+    paradigm: alts Bollinger-LOWER MR
+    killed_at_round: 13
+    kill_reason: structural_winter_fragility  # distinct from BNB RSI-MR which IS regime-stable
+  - name: BNBSizedConviction
+    paradigm: BNB RSI-MR + RSI-depth conviction sizing (Pareto-frontier reference)
+    killed_at_round: 22
+    kill_reason: slot_freed_for_paradigm_experiment  # mechanism preserved in PerPairMR + RegimeAdaptive
+  - name: CrossPairRatio
+    paradigm: BTC/ETH ratio z-score MR
+    killed_at_round: 23
+    kill_reason: paradigm_cap_cross_version  # confirms v0.4.0 CrossPairMR finding (different ratio, same cap)
+  - name: MomentumGoldFilters
+    paradigm: 4h MACD momentum + ALL gold filters stacked
+    killed_at_round: 25
+    kill_reason: momentum_0_4_cap_holds_intrinsic  # v0.4.0 cap CONFIRMED INTRINSIC; filter-stack-overload extended
+
+aha_moments:
+  - round: 9
+    type: r0_baseline_already_on_pareto_frontier
+    commit: 021e120
+    summary: |
+      Single sizing ablation lifted r0 BNBMeanRevertSharp (robust 0.0789) →
+      BNBSizedConviction (robust 0.0980). Identical 115 trades, identical
+      WR 69.6%, only difference: RSI-depth conviction sizing. **The r9
+      output became the v0.4.1 robust_sharpe ceiling for the entire run** —
+      the next 20 rounds of evolution + creation never produced a strictly
+      better-dominating strategy. Establishes the "early Pareto frontier
+      lock" pattern: a paradigm + a single sizing ablation can saturate
+      the local optimum before complexity arrives.
+  - round: 14
+    type: second_gold_filter_named
+    commit: 3d9b9b0
+    summary: |
+      PerPairMR alts-branch added 4h ema50>ema200 trend gate. winter
+      -0.11 → +0.05 (positive flip), recovery -0.10 → +0.11 (positive
+      flip), full_5y 0.14 → 0.30 (doubled). Agent: "4h trend gate is the
+      second gold finding (volume filter was first)." Both gold filters
+      now have explicit attribution: volume (v0.2.0) for capitulation /
+      MR family; 4h trend (v0.4.1) for cross-paradigm regime gating.
+  - round: 16
+    type: conviction_sizing_paradigm_agnostic
+    commit: 407b700
+    summary: |
+      CrashRebound +DD-depth conviction sizing (scale=clamp(|dd|/0.20,0.5,2.0)):
+      robust 0.062 → 0.085 (+37%). Mechanism mirrors r9's RSI-depth sizing
+      on BNB-MR. Two independent paradigms (drawdown-rebound + RSI-MR), two
+      different signal sources (DD magnitude + RSI level), same effect:
+      same trades, redistributed profit toward deeper-conviction regimes.
+      **NEW finding: conviction-style sizing (scale by signal depth) is
+      paradigm-agnostic.** Refines v0.4.0's "sizing is risk-control not edge"
+      — sizing isn't edge, but conviction-style sizing IS a paradigm-agnostic
+      profit-redistribution mechanism.
+  - round: 18
+    type: paradigm_conditional_strategy_emerges
+    commit: e30aaff
+    summary: |
+      PerPairMR added BTC+ETH Donchian-48 breakout branch on top of existing
+      BNB→RSI-MR + SOL+AVAX→BB-MR. **First multi-paradigm-per-pair strategy
+      in the project** — same .py file expresses three different paradigms
+      depending on which pair the entry signal comes from. Pareto-improvement:
+      full_5y 0.30 → 0.35, robust held 0.052. Trade count 387 → 519. This
+      strategy form is enabled specifically by the v0.4.1 pair_basket
+      affordance + per-pair conditional logic in entry signals. Architecturally
+      novel structure that earlier versions could not express.
+  - round: 24
+    type: filter_paradigm_specificity
+    commit: ae03008
+    summary: |
+      MomentumGoldFilters dropped volume filter: bull sharpe 0.05 → 0.46
+      (~9× lift). v0.2.0 had named volume filter as "first universal gold
+      filter". v0.4.1 evidence: volume filter HURTS continuation/momentum
+      paradigms (continuations don't spike volume on entry) and HELPS
+      capitulation/MR paradigms (capitulations DO spike volume).
+      **Narrows v0.2.0 finding from universal to paradigm-specific.**
+      Third cross-paradigm transferability rule (alongside conviction sizing
+      = transfers, patient exit = breakout-only).
+  - round: 26
+    type: sizing_composition_rule
+    commit: f53740b
+    summary: |
+      RegimeAdaptiveBNB composed regime-detection sizing × RSI-depth sizing
+      multiplicatively. Recovery 0.075 → 0.097, robust 0.097 (Pareto-equal
+      to BNBSized r9). **NEW rule: sizing mechanisms compose multiplicatively
+      when their underlying signals are independent.** First explicit
+      composition observed in the project; opens path to multi-mechanism
+      ensemble sizing.
+  - round: 28
+    type: composition_failure_mode_explained
+    commit: f903ae2
+    summary: |
+      CrashRebound attempted same composition (DD-conviction × regime sizing):
+      robust 0.085 → -0.083 (catastrophic crash). Agent diagnosed:
+      "regime and DD-signal are NEGATIVELY correlated (bull=small DDs=signal
+      weak; winter=big DDs=signal strong). Composition INVERSE-amplifies."
+      **Refines composition rule: only safe when underlying signals are
+      independent OR positively correlated; negatively correlated signals
+      cause inverse-amplification.** Most precise sizing rule produced
+      across all five versions to date.
+  - round: 27
+    type: third_instance_pareto_walks_meta
+    commit: 2890675
+    summary: |
+      RegimeAdaptiveBNB pushed regime sizing 1.5x/0.5x → 2.0x/0.25x:
+      robust 0.097 → 0.089, avg_position 31% → 40%. Pareto MOVE not
+      improvement. **Third independent instance of "single-knob sizing
+      walks produce Pareto move not Pareto improvement"** (BNBSized r17
+      linear formula, v0.4.0 r17-r20 vol-target ladder, RegimeAdaptive r27
+      regime multiplier). Three datapoints across two versions = stable
+      meta-finding.
+  - round: 29
+    type: agent_self_converged_voluntary_finalize
+    commit: ebe3254
+    summary: |
+      All 3 strategies (CrashRebound, PerPairMR, RegimeAdaptiveBNB) marked
+      "FINAL" in r29 notes — agent voluntarily declared the run converged
+      with all three at proven baselines (post-revert from r28's failed
+      composition experiment). **First time the project ended with explicit
+      multi-strategy convergence statement.** Different from v0.4.0's
+      "Pareto-end stop" (one strategy degenerating into noise) — here the
+      agent recognized that 3-strategy lineup had reached a stable joint
+      optimum and stopped without metric saturation.
+
+comparative_findings:
+  # Findings that are NEW in v0.4.1 (not previously in any version's retrospective)
+  new_findings:
+    - title: Conviction-style sizing transfers paradigm-agnostically
+      detail: |
+        Two independent demonstrations: RSI-depth on BNB-MR (r9, +24%
+        robust) and DD-depth on drawdown-rebound (r16, +37% robust).
+        Same mechanism — scale stake by inverse of signal-depth — works
+        across mean-reversion AND counter-trend MR. Sizing isn't edge
+        (v0.4.0 finding) but **conviction-style sizing IS a paradigm-
+        agnostic redistribution mechanism**. Refines, doesn't contradict,
+        v0.4.0 finding 1.
+    - title: Sizing-composition rule (multiplicative when signals independent)
+      detail: |
+        RegimeAdaptiveBNB r26 composed regime × RSI sizing successfully
+        (independent signals: regime ⊥ within-regime RSI). CrashRebound
+        r28 composed DD × regime catastrophically (regime correlated with
+        DD-magnitude → inverse-amplification). New rule: composition
+        only safe when sizing signals are mutually independent or
+        positively correlated.
+    - title: Signal-driven sizing > regime-driven sizing for MR (then composed = best)
+      detail: |
+        RegimeAdaptive r25 with regime-only sizing: bull/winter sharpe at
+        per-strategy historic high (0.358/0.236) but recovery 0.075 (low) —
+        regime classification can't distinguish within-recovery pullbacks
+        from neutral periods. RSI-depth sizing (BNBSized r9) does. r26
+        composed both = simultaneously highest bull/winter AND lifted
+        recovery. Implies: signal-driven sizing has higher resolution
+        than regime-driven for paradigms with within-regime structure;
+        regime-driven adds orthogonal context when signals are independent.
+    - title: First paradigm-conditional strategy form
+      detail: |
+        PerPairMR (final): BNB→RSI MR / SOL+AVAX→BB MR / BTC+ETH→Donchian
+        breakout. Same .py file, three paradigms routed by pair. Enabled
+        specifically by v0.4.1's pair_basket affordance + per-pair
+        conditional entry signals. Architecturally novel — earlier versions
+        forced one paradigm per file. Pareto-improvement: full_5y +35.8%
+        across 519 trades on a 5-pair basket while holding robust 0.052.
+    - title: 4h trend gate as second gold filter (paradigm-agnostic)
+      detail: |
+        PerPairMR r14 alts-branch: 4h ema50>ema200 gate flipped winter and
+        recovery from negative to positive (winter -0.11→+0.05,
+        recovery -0.10→+0.11). Agent named "second gold finding (volume
+        was first)". Distinct from volume filter — works for momentum,
+        counter-trend, and breakout paradigms tested in v0.4.1.
+
+  # Cross-version REINFORCEMENTS — v0.4.1 confirms or extends prior findings
+  cross_version_reinforcements:
+    - title: Cross-pair-MR has structural paradigm cap (v0.4.0 + v0.4.1, two failures)
+      detail: |
+        v0.4.0 CrossPairMR (alt/BTC ratio MR) declared exhausted r7.
+        v0.4.1 CrossPairRatio (BTC/ETH ratio z-score MR) declared exhausted
+        r23 after 1 round. Different ratios, different timeranges, same
+        result: ratio MR has structural exposure to multi-month decoupling
+        phases that no within-strategy patch resolves. Two independent
+        failures = paradigm cap, not version-specific issue.
+    - title: Cross-pair-leader breakout paradigm cap under robust_sharpe
+      detail: |
+        v0.3.0 BTCLeaderBreakX 1.07 (single bull regime) → v0.4.0
+        BTCLeaderBreakV4 0.79 baseline (single 5-yr regime mix, one timerange)
+        → v0.4.1 MajorsBTCLeader robust -0.17 (4 timerange honesty bar).
+        **The v0.3.0 1.07 hero collapses progressively as the oracle gets
+        harder.** v0.4.0 retro flagged "BTC-leader signals concentrate
+        portfolio DD during leadership cycles" — v0.4.1 confirms by failing
+        winter sharpe specifically. Cross-version DD-concentration finding
+        upgraded to "this paradigm cannot survive multi-timerange honesty bar".
+    - title: Momentum 0.40 cap is INTRINSIC even with optimal filter stack
+      detail: |
+        v0.3.0 MACDMomentumMTF 0.41, v0.4.0 MomentumMTFConfluence 0.40,
+        v0.4.1 MomentumGoldFilters 0.21 with ALL gold filters stacked
+        (slope-up + close>EMA200 + 4h ema gate + volume + patient SMA50 exit).
+        Stacking degraded vs less-filtered v0.4.0 baseline. Confirms+extends
+        v0.4.0 r16 filter-stack-overload finding: optimal filter stack does
+        NOT push past intrinsic paradigm cap; **the 0.40 momentum ceiling is
+        not a tuning artifact — it's structural**.
+    - title: Single-knob sizing walks produce Pareto move not improvement (3rd instance)
+      detail: |
+        BNBSized r17 (linear vs 25/RSI formula), v0.4.0 r17-r20 (vol-target
+        ladder), RegimeAdaptive r27 (regime multiplier 1.5x/0.5x → 2x/0.25x).
+        Three independent instances across two versions, same outcome:
+        sharpe drops slightly OR moves laterally, avg_position rises, DD
+        widens. **Sizing-knob single-direction walk = Pareto move, never
+        Pareto improvement.** Stable cross-version meta-finding.
+
+  # Cross-version NARROWS — v0.4.1 corrects/limits prior universal claims
+  cross_version_narrows:
+    - title: Volume filter is paradigm-specific (narrows v0.2.0 universal claim)
+      detail: |
+        v0.2.0 declared "volume filter universal when stack is light".
+        v0.4.1 r24 evidence: volume filter HURTS momentum (continuations
+        don't spike volume; bull sharpe 0.05 → 0.46 when removed) and
+        HELPS capitulation/MR (CrashRebound r10 confirmed lift). **Narrows
+        v0.2.0 finding from universal to family-specific: volume helps
+        capitulation/MR; volume hurts continuation/momentum.**
+    - title: Patient-exit (SMA75-100) is breakout-family-specific (narrows v0.4.0)
+      detail: |
+        v0.4.0 r13 finding "regime-mix prefers SMA75-100 patient exit" was
+        on a breakout strategy. v0.4.1 r14 tested transfer to CrashRebound
+        (counter-trend MR family): SMA50→SMA100 backfired catastrophically
+        (winter 0.06→-0.22, recovery 0.19→0.01). Agent: "Patient exit lets
+        crash bounces ride past peak into reversion — drawdown-rebounds
+        revert quickly." **Narrows v0.4.0 finding from "regime-mix prefers
+        patience" to "breakout-family prefers patience; counter-trend MR
+        family prefers tight exits".**
+
+behavioral_observations:
+  - title: Voluntary multi-strategy convergence stop
+    note: |
+      All 3 strategies marked "FINAL" voluntarily in r29 notes. Different
+      mechanism from v0.4.0's Pareto-end stop (one strategy degenerating
+      into single-metric noise) — here the agent recognized the joint
+      3-strategy lineup had stabilized at proven baselines after r28's
+      composition experiment failed (CrashRebound robust → -0.083) and
+      reverted. Most "researcher-like" stop in the project so far:
+      experiment failed → revert → declare convergence on multi-strategy
+      portfolio rather than continue squeezing.
+  - title: Bookkeeping drift from v0.4.0 RESOLVED
+    note: |
+      v0.4.0 retrospective flagged "implicit kill via subsequent create note"
+      pattern (only 1 explicit kill row for 4 actual kills). v0.4.1 shows
+      9 explicit kill rows for 9 actual kills — agent followed the implied
+      protocol consistently across the entire run. No analysis.ipynb fix
+      needed; behavior change alone resolved the issue. Suggests the
+      retrospective itself functions as durable program guidance even
+      though not in program.md.
+  - title: Pareto-frontier-aware decision-making throughout
+    note: |
+      pareto_dominated_by gate fired on all 3 FINAL strategies, with the
+      dominators being early-run strategies (BNBMeanRevertSharp r0,
+      BNBSizedConviction r9). Agent did not treat Pareto domination as
+      "automatic kill" — it kept evolving the dominated strategies because
+      they explored different paradigms (drawdown-rebound, paradigm-conditional)
+      with potential for future Pareto extension. Demonstrates the gate
+      working as informational rather than imperative. The agent treated
+      Pareto domination at the same level as profit_floor failure: a
+      gate state to acknowledge in the note, not a hard kill criterion.
+  - title: Ablation-fork pattern continues
+    note: |
+      r6 fork (BNBMeanRevertSharp → BNBMeanRevertMulti) was ablation-style:
+      drop the pair_basket constraint to test "is BNB MR pair-specific or
+      generic?" — answer arrived in 1 round (BNB +0.15 / others ≤+0.02),
+      child killed r7. Cleaner than v0.4.0's fork (which was also ablation
+      but tested the same strategy across more rounds). Pattern named in
+      v0.4.0 retro is now stable across 2 versions. r9 BNBSizedConviction
+      was also conceptually a fork (note says "fork of BNB") but logged
+      as create — minor bookkeeping inconsistency, doesn't affect findings.
+  - title: Zero classic Goodhart attempts (5th run in a row)
+    note: |
+      No exit_profit_only toggles, no ROI clipping, no Sharpe-up-while-
+      profit-down without explicit Pareto-walk justification.
+      Multi-objective gates likely had a structural deterrent effect:
+      pareto_dominated_by automatically detects "sizing-walk Sharpe inflation"
+      patterns by reading historical results.tsv rows. r17 BNBSized linear
+      formula attempt (Pareto move, not Goodhart but Pareto-tracked) was
+      auto-flagged as dominated by r9 baseline.
+
+limitations:
+  - title: profit_floor failed on all 3 FINAL strategies
+    detail: |
+      Threshold 20% per timerange — none of the 3 FINAL strategies clear
+      this for winter_2022 (best is RegimeAdaptiveBNB +3.71%). This is
+      partly inherent to "long-only spot in a bear market" (BaH winter
+      was -53% to -85% across pairs), partly a calibration question
+      (20% / year on a 5-year regime is high for low-position-size
+      strategies). The gate did its job (informed agent of the floor)
+      but no strategy achieved it. Recommend v0.5.0 either lowering
+      threshold or making it timerange-conditional (e.g., winter floor
+      could be ≥0%, recovery floor ≥10%).
+  - title: All 3 FINAL strategies Pareto-dominated by early-run strategies
+    detail: |
+      Pareto frontier within the run is just {BNBMeanRevertSharp r0,
+      BNBSizedConviction r9} — both BNB-only RSI MR strategies, both
+      KILLED during the run (r10 + r22 respectively, mechanisms preserved
+      in successors). The 22 subsequent rounds of evolution + creation
+      did not produce a strategy strictly dominating these two on
+      (robust_sharpe, max_dd). Suggests "early local optimum lock"
+      pattern: a strong baseline + a single sizing ablation can
+      saturate the regime-robust frontier before complexity arrives.
+      v0.5.0 might explicitly carry forward Pareto-frontier strategies
+      across rounds (don't kill them just to free slots) and let agent
+      evolve next to them rather than away from them.
+  - title: robust_sharpe absolute values are tiny (~0.05-0.10)
+    detail: |
+      Successful but not impressive in trading-deployment terms. Robust
+      sharpe is min-of-4-regimes, dominated by winter; long-only spot
+      crypto in 2022 has structurally low alpha. **The headline isn't
+      a Sharpe number — it's "first multi-strategy lineup with robust
+      sharpe > 0 across all regimes simultaneously"**. Compare to BaH
+      winter sharpe which is consistently negative (-0.7 to -1.5) for
+      every pair — the strategies' near-zero positive winter sharpe is
+      what the gate forces them to defend.
+  - title: Strategies underperform BaH on full_5y
+    detail: |
+      CrashRebound +55.7% / PerPairMR +35.8% / RegimeAdaptive +16.4%
+      vs BaH +1740% to +3632% over the same 5 years (5-pair equal-weight
+      ~+2188%). The strategies' niche is winter (where BaH is -50% to -85%
+      and strategies are slightly positive) — they trade absolute return
+      for drawdown protection. Useful framing for downstream readers:
+      v0.4.1 strategies are not standalone trading strategies, they're
+      "drawdown-protected partial-exposure" research artifacts. Real-world
+      use would be as winter-hedge allocation alongside BaH, not replacement.
+  - title: Long-only spot is the binding affordance constraint
+    detail: |
+      All v0.4.1 strategies long-only spot — winter alpha extraction is
+      structurally capped because best behavior in a bear market is "don't
+      trade". Adding shorting (perp futures) would convert winter from
+      "minimize loss" to "extract alpha from negative drift" and is the
+      single most-impactful affordance unlock available. Out of v0.4.1 scope
+      but the obvious v0.5.0+ direction.
+  - title: pair_basket scope still narrow (1-3 pairs in FINAL strategies)
+    detail: |
+      CrashRebound runs 3 pairs (alts+BNB), PerPairMR runs full 5,
+      RegimeAdaptive runs only BNB. None of the FINAL strategies expanded
+      basket to test cross-asset diversification meaningfully. CrashRebound
+      r18 attempted basket expansion to 5-pair, surfaced clean Pareto move
+      (full sharpe +0.40 BUT winter dropped 0.085→0.013), reverted r19.
+      The robust_sharpe metric structurally penalizes basket expansion when
+      added pairs aren't winter-positive — basket selection becomes a
+      regime-stability optimization rather than diversification-for-return.
+
+recommended_v0_5_0_directions:
+  # v0.4.0 retrospective listed candidates A-F. Re-evaluating for v0.5.0:
+  done_in_v0_4_1:
+    - B  # multi-objective oracle (profit_floor + min_position_size + pareto_dominated_by) — implemented
+    - C  # external benchmark (BaH per timerange) — implemented
+    - F  # bookkeeping (kill events explicit) — resolved by behavior change, not code change
+
+  remaining_from_v0_4_0:
+    - id: A
+      title: External orchestrator for context-resetting
+      priority_now: medium
+      note: |
+        v0.4.1 ran 30 rounds vs v0.4.0's 20 — context less binding when
+        per-round events stay manageable (one strategy may emit 4 timerange
+        blocks but each is compact). Per-round info density still grows
+        though; orchestrator helps if v0.5.0 adds more strategies / pairs.
+    - id: D
+      title: Cross-asset-class generalization
+      priority_now: low
+      note: |
+        Major engineering effort, scope creep beyond "crypto quant prototype".
+        Defer indefinitely unless project pivot.
+    - id: E
+      title: Per-strategy timeframe selection
+      priority_now: medium
+      note: |
+        Modest improvement; aligns with "let strategies declare their full
+        configuration" trend that pair_basket and test_timeranges started.
+
+  new_v0_5_0_candidates:
+    - id: G
+      title: Sub-1h base timeframe (15m or 5m)
+      priority_now: high
+      note: |
+        Capitulation-rebound, breakout-pullback, MR entry-timing all benefit
+        from finer base TF. Cost: data 4-12x, backtest 3-5x. Plausibly
+        biggest single robust_sharpe lift available without breaking spot
+        constraint. Independent of all other proposed changes.
+    - id: H
+      title: Hyperopt inner loop
+      priority_now: high
+      note: |
+        Hand off continuous-parameter search (RSI threshold, BB width, etc.)
+        to FreqTrade's hyperopt; LLM agent constrains the space. Multiplies
+        effective search depth. Risk: introduces new Goodhart surface —
+        needs careful OOS split design and oracle-gate enforcement.
+    - id: I
+      title: Shorting via perp futures
+      priority_now: high (transformative)
+      note: |
+        BIGGEST single unlock available. Converts winter from "sit out"
+        to "extract alpha from negative drift". Plausible 2-5x robust_sharpe
+        lift just from being able to act in bears. Cost: trading_mode change,
+        funding-rate data, strategy short-side logic, oracle adjustment for
+        funding cost. Not "one variable per version" if combined with
+        other changes — likely deserves its own version.
+    - id: J
+      title: Carry forward Pareto-frontier strategies across rounds
+      priority_now: medium
+      note: |
+        v0.4.1 limitation: BNBSized r9 (Pareto-frontier) was killed at r22
+        for slot freeing. Future version could enforce "Pareto-frontier
+        strategies are sticky — don't kill, set aside in archive slot".
+        Lets agent evolve next to the frontier rather than reset to zero
+        each time a new paradigm starts.
+
+  recommended_ordering: |
+    G (sub-hour) + H (hyperopt) bundled → v0.5.0 (independent affordances,
+    each ~1.5-2x robust_sharpe, both within long-only spot framework).
+    I (shorting) standalone → v0.6.0 (transformative single-variable change,
+    cleanest attribution if isolated). E (per-strategy TF) folds naturally
+    into G. A (orchestrator), J (Pareto carry-forward), F (further
+    bookkeeping) deferred to as-needed. D (cross-asset) deferred indefinitely.
