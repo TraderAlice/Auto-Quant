@@ -125,15 +125,20 @@ class RegimeAdaptiveBNB(IStrategy):
         rsi_now = df["rsi"].iloc[-1]
         if regime != regime or rsi_now != rsi_now or rsi_now <= 0:
             return proposed_stake
+        # r27: push regime sizing harder. bull 1.5→2.0, winter 0.5→0.25.
+        # Pareto-walk on regime-conditional sizing dimension. r26 baseline
+        # (1.5/1.0/0.5) gave robust 0.097; aggressive (2.0/1.0/0.25)
+        # tests whether stretching the regime stake-spread lifts robust
+        # or just inflates the bull/winter Sharpe-vs-profit Pareto curve.
         if regime == 2:
-            regime_scale = 1.5
+            regime_scale = 2.0
         elif regime == 0:
-            regime_scale = 0.5
+            regime_scale = 0.25
         else:
             regime_scale = 1.0
         rsi_scale = 25.0 / max(float(rsi_now), 5.0)
         rsi_scale = max(0.5, min(2.0, rsi_scale))
         scale = regime_scale * rsi_scale
-        scale = max(0.25, min(3.0, scale))
+        scale = max(0.125, min(4.0, scale))
         stake = proposed_stake * scale
         return max(min_stake or 0.0, min(max_stake, stake))

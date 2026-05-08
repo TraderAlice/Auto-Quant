@@ -74,8 +74,12 @@ class PerPairMR(IStrategy):
     @informative("1d")
     def populate_indicators_1d(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         dataframe["ema200"] = ta.EMA(dataframe, timeperiod=200)
+        # r27: lengthen slope window 7→14 bars. Tests if longer-window
+        # slope-up filter is stricter and silences more sideways-recovery
+        # entries on alts. r14's 7-bar slope was a guess — never tested
+        # alternatives.
         dataframe["ema200_slope_up"] = (
-            dataframe["ema200"] > dataframe["ema200"].shift(7)
+            dataframe["ema200"] > dataframe["ema200"].shift(14)
         ).astype(int)
         return dataframe
 
