@@ -125,48 +125,22 @@ class CrashRebound(IStrategy):
         side: str,
         **kwargs,
     ) -> float:
-        # r28: COMPOSE DD-conviction × regime-detection sizing (transfer
-        # from RegimeAdaptiveBNB r26 finding that composition works
-        # multiplicatively without degrading either mechanism). Regime
-        # uses the same indicators as RegimeAdaptive: 1d slope_up +
-        # close vs EMA200 with 1.10/0.90 thresholds.
-        # bull regime → 1.5x boost; winter → 0.5x cut; neutral → 1.0
-        # composed × DD-conviction (abs(dd)/0.20 clamped 0.5-2.0)
+        # r29: revert r28 regime composition. r28 finding: composing
+        # regime×DD-conviction INVERSE-amplifies because regime and DD-
+        # signal are NEGATIVELY correlated (bull = small DDs, winter =
+        # big DDs). Bull entries got down-sized (0.5×1.5=0.75) just
+        # when DD-signal is weakest; winter entries cancel out (2.0×
+        # 0.5=1.0) erasing the conviction lift. Robust crashed
+        # 0.085→-0.083. Cross-paradigm composition rule: only works
+        # when regime ⊥ signal-strength (BNB-RSI case) or positively
+        # correlated. Reverting to pure DD-conviction (r16 optimum).
         df, _ = self.dp.get_analyzed_dataframe(pair, self.timeframe)
         if df.empty or "drawdown_pct" not in df.columns:
             return proposed_stake
         dd = df["drawdown_pct"].iloc[-1]
         if dd != dd or dd >= 0:
             return proposed_stake
-        dd_scale = abs(float(dd)) / 0.20
-        dd_scale = max(0.5, min(2.0, dd_scale))
-
-        # Regime detection inline (CrashRebound doesn't store a `regime`
-        # column; compute on the fly from existing 1d EMA200 + slope_up).
-        if "ema200_slope_up_1d" in df.columns and "ema200_1d" in df.columns:
-            slope_up = df["ema200_slope_up_1d"].iloc[-1]
-            close_now = df["close"].iloc[-1]
-            ema200_1d_now = df["ema200_1d"].iloc[-1]
-            if (
-                slope_up == 1
-                and close_now == close_now
-                and ema200_1d_now == ema200_1d_now
-                and close_now > ema200_1d_now * 1.10
-            ):
-                regime_scale = 1.5
-            elif (
-                slope_up == 0
-                and close_now == close_now
-                and ema200_1d_now == ema200_1d_now
-                and close_now < ema200_1d_now * 0.90
-            ):
-                regime_scale = 0.5
-            else:
-                regime_scale = 1.0
-        else:
-            regime_scale = 1.0
-
-        scale = dd_scale * regime_scale
-        scale = max(0.25, min(3.0, scale))
+        scale = abs(float(dd)) / 0.20
+        scale = max(0.5, min(2.0, scale))
         stake = proposed_stake * scale
         return max(min_stake or 0.0, min(max_stake, stake))
