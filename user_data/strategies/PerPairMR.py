@@ -140,39 +140,11 @@ class PerPairMR(IStrategy):
             dataframe.loc[dataframe["close"] < dataframe["sma50"], "exit_long"] = 1
         return dataframe
 
-    def custom_stake_amount(
-        self,
-        pair: str,
-        current_time,
-        current_rate: float,
-        proposed_stake: float,
-        min_stake,
-        max_stake: float,
-        leverage: float,
-        entry_tag: str,
-        side: str,
-        **kwargs,
-    ) -> float:
-        # r21: regime-aware conviction sizing on BNB. r20 finding: plain
-        # 25/RSI sizing dropped robust 0.052→0.038 — BNB winter sharpe
-        # went 0.22→0.19 because deeper-RSI entries in winter are MORE
-        # risky (smaller bounce probability when 1d trend down). Gating
-        # the conviction boost on slope_up tests whether regime-conditional
-        # sizing avoids the winter penalty while keeping bull/recovery
-        # lift.
-        df, _ = self.dp.get_analyzed_dataframe(pair, self.timeframe)
-        if df.empty or "rsi" not in df.columns:
-            return proposed_stake
-        if pair == "BNB/USDT":
-            rsi_now = df["rsi"].iloc[-1]
-            slope_up = df["ema200_slope_up_1d"].iloc[-1] if "ema200_slope_up_1d" in df.columns else 0
-            if rsi_now != rsi_now or rsi_now <= 0:
-                return proposed_stake
-            if slope_up == 1:
-                scale = 25.0 / max(float(rsi_now), 5.0)
-                scale = max(0.5, min(2.0, scale))
-            else:
-                scale = 1.0  # no conviction boost when regime trajectory unfavorable
-            stake = proposed_stake * scale
-            return max(min_stake or 0.0, min(max_stake, stake))
-        return proposed_stake
+    # r22: removed custom_stake_amount entirely. r20+r21 transfer
+    # experiment finding: BNB sizing doesn't compose linearly inside
+    # multi-pair strategy. Plain 25/RSI: robust 0.052→0.038 (worse).
+    # Regime-aware (slope_up gate): robust 0.052→0.044 (better than
+    # plain but still worse than baseline). Net: sizing is best applied
+    # at strategy isolation (single-pair) rather than embedded in
+    # multi-pair containers. Cross-pair attribution is meaningfully
+    # different from single-pair attribution.
