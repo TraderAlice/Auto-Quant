@@ -110,18 +110,30 @@ class RegimeAdaptiveBNB(IStrategy):
         side: str,
         **kwargs,
     ) -> float:
-        # Regime-detected sizing: bull 1.5x / neutral 1.0x / winter 0.5x.
+        # r26: COMPOSE regime sizing × RSI-conviction sizing.
+        # regime_scale: bull 1.5 / neutral 1.0 / winter 0.5
+        # rsi_scale: 25/RSI clamped [0.5, 2.0] (BNBSized r9 formula)
+        # final = regime_scale × rsi_scale, then re-clamped [0.25, 3.0]
+        # to prevent extreme stakes. r25 finding: regime sizing lifts
+        # bull & winter individually but recovery dominated robust;
+        # composing should let RSI-conviction lift recovery while
+        # regime keeps bull/winter shape.
         df, _ = self.dp.get_analyzed_dataframe(pair, self.timeframe)
-        if df.empty or "regime" not in df.columns:
+        if df.empty or "regime" not in df.columns or "rsi" not in df.columns:
             return proposed_stake
         regime = df["regime"].iloc[-1]
-        if regime != regime:
+        rsi_now = df["rsi"].iloc[-1]
+        if regime != regime or rsi_now != rsi_now or rsi_now <= 0:
             return proposed_stake
         if regime == 2:
-            scale = 1.5
+            regime_scale = 1.5
         elif regime == 0:
-            scale = 0.5
+            regime_scale = 0.5
         else:
-            scale = 1.0
+            regime_scale = 1.0
+        rsi_scale = 25.0 / max(float(rsi_now), 5.0)
+        rsi_scale = max(0.5, min(2.0, rsi_scale))
+        scale = regime_scale * rsi_scale
+        scale = max(0.25, min(3.0, scale))
         stake = proposed_stake * scale
         return max(min_stake or 0.0, min(max_stake, stake))
