@@ -79,17 +79,18 @@ Plus:
   the "Sharpe-as-single-oracle has a degeneracy boundary" finding and the
   cleanest sizing-vs-edge controlled experiment in the project.
   See [retrospective](versions/0.4.0/retrospective.md).
-- **v0.4.1** (current): four affordances added on top of v0.4.0:
-  - **Portfolio basket** (`pair_basket`): strategies declare which pairs to
-    trade rather than being forced through all 5
-  - **Multi-timerange testing** (`test_timeranges`): each strategy backtested
-    across multiple regime segments per round; `robust_sharpe = min` becomes
-    the headline metric
-  - **Buy-and-hold benchmark**: per-timerange BaH portfolio metrics in every
-    output block
-  - **Multi-objective gates**: `profit_floor`, `min_position_size`,
-    `pareto_dominated_by` flank `robust_sharpe` to defend against the
-    Sharpe-via-tightening Pareto degeneracy v0.4.0 surfaced. In-flight.
+- **v0.4.1** ([archive](versions/0.4.1/)): four affordances bundled —
+  `pair_basket` (strategy-declared portfolio), `test_timeranges` (multi-regime
+  backtest with `robust_sharpe = min` as headline), per-timerange buy-and-hold
+  benchmark, and multi-objective gates (`profit_floor`, `min_position_size`,
+  `pareto_dominated_by`) flanking the headline metric. Direct response to
+  v0.4.0's Sharpe-degeneracy finding. **First multi-strategy lineup with
+  `robust_sharpe > 0` across all four declared regimes (bull/winter/recovery/
+  full-5y) simultaneously**, but the run also surfaced an "early Pareto lock"
+  pattern where the regime-robust frontier was set at round 9 by a single
+  sizing ablation and never broken across the next 20 rounds. Five new
+  cross-version findings + four reinforcements + two narrows of prior
+  universal claims. See [retrospective](versions/0.4.1/retrospective.md).
 
 ## Requirements
 
