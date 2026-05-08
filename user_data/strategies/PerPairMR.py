@@ -153,23 +153,26 @@ class PerPairMR(IStrategy):
         side: str,
         **kwargs,
     ) -> float:
-        # r20: per-branch conviction sizing transfer test.
-        # BNB branch (RSI<25 entry): scale = 25/RSI clamped [0.5, 2.0]
-        #   (BNBSized r9 formula — confirmed Pareto-optimal sizing for
-        #   this signal).
-        # Alts BB branch (close<bb_lower entry): scale = 1.0 baseline
-        #   for now; r21 may add depth-conviction if BNB transfer works.
-        # Majors Donchian branch: scale = 1.0 baseline (no natural
-        #   conviction signal beyond the binary break).
+        # r21: regime-aware conviction sizing on BNB. r20 finding: plain
+        # 25/RSI sizing dropped robust 0.052→0.038 — BNB winter sharpe
+        # went 0.22→0.19 because deeper-RSI entries in winter are MORE
+        # risky (smaller bounce probability when 1d trend down). Gating
+        # the conviction boost on slope_up tests whether regime-conditional
+        # sizing avoids the winter penalty while keeping bull/recovery
+        # lift.
         df, _ = self.dp.get_analyzed_dataframe(pair, self.timeframe)
         if df.empty or "rsi" not in df.columns:
             return proposed_stake
         if pair == "BNB/USDT":
             rsi_now = df["rsi"].iloc[-1]
+            slope_up = df["ema200_slope_up_1d"].iloc[-1] if "ema200_slope_up_1d" in df.columns else 0
             if rsi_now != rsi_now or rsi_now <= 0:
                 return proposed_stake
-            scale = 25.0 / max(float(rsi_now), 5.0)
-            scale = max(0.5, min(2.0, scale))
+            if slope_up == 1:
+                scale = 25.0 / max(float(rsi_now), 5.0)
+                scale = max(0.5, min(2.0, scale))
+            else:
+                scale = 1.0  # no conviction boost when regime trajectory unfavorable
             stake = proposed_stake * scale
             return max(min_stake or 0.0, min(max_stake, stake))
         return proposed_stake
