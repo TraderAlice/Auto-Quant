@@ -139,3 +139,37 @@ class PerPairMR(IStrategy):
             # AltsBollBreak r1 finding — breakouts ride trends).
             dataframe.loc[dataframe["close"] < dataframe["sma50"], "exit_long"] = 1
         return dataframe
+
+    def custom_stake_amount(
+        self,
+        pair: str,
+        current_time,
+        current_rate: float,
+        proposed_stake: float,
+        min_stake,
+        max_stake: float,
+        leverage: float,
+        entry_tag: str,
+        side: str,
+        **kwargs,
+    ) -> float:
+        # r20: per-branch conviction sizing transfer test.
+        # BNB branch (RSI<25 entry): scale = 25/RSI clamped [0.5, 2.0]
+        #   (BNBSized r9 formula — confirmed Pareto-optimal sizing for
+        #   this signal).
+        # Alts BB branch (close<bb_lower entry): scale = 1.0 baseline
+        #   for now; r21 may add depth-conviction if BNB transfer works.
+        # Majors Donchian branch: scale = 1.0 baseline (no natural
+        #   conviction signal beyond the binary break).
+        df, _ = self.dp.get_analyzed_dataframe(pair, self.timeframe)
+        if df.empty or "rsi" not in df.columns:
+            return proposed_stake
+        if pair == "BNB/USDT":
+            rsi_now = df["rsi"].iloc[-1]
+            if rsi_now != rsi_now or rsi_now <= 0:
+                return proposed_stake
+            scale = 25.0 / max(float(rsi_now), 5.0)
+            scale = max(0.5, min(2.0, scale))
+            stake = proposed_stake * scale
+            return max(min_stake or 0.0, min(max_stake, stake))
+        return proposed_stake
