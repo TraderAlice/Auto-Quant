@@ -93,17 +93,13 @@ class CrashRebound(IStrategy):
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # r23: ADD multi-bar DD confirmation. Require drawdown<-20% to be
-        # sustained for ≥3 consecutive bars (current + 2 prior). Filters
-        # single-spike fakeouts where price wicks through -20% and
-        # recovers within an hour. Cleaner "real capitulation" signal.
-        dd_sustained = (
-            (dataframe["drawdown_pct"] < -0.20)
-            & (dataframe["drawdown_pct"].shift(1) < -0.20)
-            & (dataframe["drawdown_pct"].shift(2) < -0.20)
-        )
+        # r24: revert r23 multi-bar DD confirmation. r23 finding: 3-bar
+        # sustained-DD drops the inflection-point entries (bounces start
+        # WITHIN the 3-bar window) — robust 0.085→0.0095. Single-bar
+        # DD<-20% trigger IS the local optimum; capitulation signals
+        # don't need post-confirmation when paired with RSI<35 already.
         dataframe.loc[
-            dd_sustained
+            (dataframe["drawdown_pct"] < -0.20)
             & (dataframe["rsi"] < 35)
             & (dataframe["ema200_slope_up_1d"] == 1)
             & (dataframe["volume"] > 1.3 * dataframe["volume_sma20"]),

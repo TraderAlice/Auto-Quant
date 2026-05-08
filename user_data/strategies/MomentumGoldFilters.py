@@ -88,12 +88,17 @@ class MomentumGoldFilters(IStrategy):
             & (dataframe["macd_4h"].shift(1) <= dataframe["macd_signal_4h"].shift(1))
             & (dataframe["macd_4h"] > 0)
         )
+        # r24: remove volume filter. r23 baseline (with volume) gave
+        # full_5y 0.21 — BELOW v0.4.0's momentum cap of 0.40. Volume
+        # filter cuts ~half of momentum entries (momentum often fires
+        # without volume spike). Test: does removing volume restore
+        # to v0.4.0-comparable Sharpe? If yes, filter-stack-overload
+        # confirmed volume-specific. If no, the cap is intrinsic.
         dataframe.loc[
             macd_bullish_cross
             & (dataframe["ema50_4h"] > dataframe["ema200_4h"])
             & (dataframe["close"] > dataframe["ema200_1d"])
-            & (dataframe["ema200_slope_up_1d"] == 1)
-            & (dataframe["volume"] > 1.3 * dataframe["volume_sma20"]),
+            & (dataframe["ema200_slope_up_1d"] == 1),
             "enter_long",
         ] = 1
         return dataframe
