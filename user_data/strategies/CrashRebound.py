@@ -93,13 +93,17 @@ class CrashRebound(IStrategy):
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # r10: ADD volume confirmation (volume > 1.3 * SMA20). Real
-        # capitulation bounces have volume; low-volume pseudo-bounces
-        # within sideways drift are likely false positives. Targets
-        # winter (which still has 33 trades netting near-zero) and
-        # recovery noise.
-        dataframe.loc[
+        # r23: ADD multi-bar DD confirmation. Require drawdown<-20% to be
+        # sustained for ≥3 consecutive bars (current + 2 prior). Filters
+        # single-spike fakeouts where price wicks through -20% and
+        # recovers within an hour. Cleaner "real capitulation" signal.
+        dd_sustained = (
             (dataframe["drawdown_pct"] < -0.20)
+            & (dataframe["drawdown_pct"].shift(1) < -0.20)
+            & (dataframe["drawdown_pct"].shift(2) < -0.20)
+        )
+        dataframe.loc[
+            dd_sustained
             & (dataframe["rsi"] < 35)
             & (dataframe["ema200_slope_up_1d"] == 1)
             & (dataframe["volume"] > 1.3 * dataframe["volume_sma20"]),
