@@ -2,6 +2,5 @@ ccxt
 numpy
 polars
 polars_ta
-pytorch_lightning
 torch
 tqdm
