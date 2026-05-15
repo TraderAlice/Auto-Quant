@@ -223,8 +223,7 @@ class CCXTEngineerEnhanced:
                     )
                     # check if folder exists
                     os.makedirs(path, exist_ok=True)
-
-              [118;1:3u      file = f"{path}/{pair.replace('/', '_').lower()}_raw.parquet"
+                    file = f"{path}/{pair.replace('/', '_').lower()}_raw.parquet"
                     print(f"\n新保存{df.height}条数据到{file}\n")
 
                     if os.path.exists(file):

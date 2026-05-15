@@ -10,6 +10,19 @@ dependencies = [
     "numpy>=1.26",
     "matplotlib>=3.8",
     "jupyter>=1.0",
+    "polars>=1.40.1",
+    "datetime>=6.0",
+    "asyncio>=4.0.0",
+    "torch>=2.12.0",
+    "polars-ta>=0.5.17",
+    "ccxt>=4.5.50",
+    "tqdn>=0.2.1",
+    "ipykernel>=7.2.0",
+    "plotly>=6.7.0",
+    "tqdm>=4.67.3",
+    "scipy>=1.17.1",
+    "plotly-resampler>=0.11.0",
+    "anywidget>=0.11.0",
 ]
 
 [tool.uv]

@@ -1,6 +1,26 @@
+# -*- coding: utf-8 -*-
+# ---
+# jupyter:
+#   jupytext:
+#     cell_metadata_filter: title,-all
+#     custom_cell_magics: kql
+#     text_representation:
+#       extension: .py
+#       format_name: percent
+#       format_version: '1.3'
+#       jupytext_version: 1.11.2
+#   kernelspec:
+#     display_name: auto-quant (3.11.15)
+#     language: python
+#     name: python3
+# ---
+
+# %%
 # pythonscript
 
 # %% initialize
+import ccxt
+import ccxt.async_support
 from enhanced_ccxt_processor import TimeStampUnit
 from enhanced_ccxt_processor import CCXTEngineerEnhanced
 from datetime import datetime
@@ -9,15 +29,15 @@ import asyncio
 learn_rate = 1e-3
 batch_size = 32
 train_start_date = datetime(2021, 1, 1, 0, 0, 0)
-train_end_date = datetime(2022, 1, 1, 0, 0, 0)
-pairs = ["BTC/USDT", "ETH/USDT"]
-periods = [TimeStampUnit.Min1, TimeStampUnit.Hour1, TimeStampUnit.Day1]
+train_end_date = datetime(2021, 1, 2, 0, 0, 0)
+pairs = ["BTC/USDT"]
+periods = [TimeStampUnit.Sec1]
 
 
 # %% random shit
 async def gather_data():
     exchanger = CCXTEngineerEnhanced(
-        notebook=True, num_worker=5, backup=True, cache_dir="datasets"
+        notebook=True, num_worker=1, backup=True,shards_per_type=1, cache_dir="datasets"
     )
     datasets = await exchanger.data_fetch_ohlvc(
         start=train_start_date,
@@ -29,12 +49,13 @@ async def gather_data():
 
 # %%
 asyncio.run(gather_data())
+#await gather_data()
 
 # %% how to use
 # label data...
-import polars
+import polars as pl
 import polars.config
-from frac_diff import frac_diff
+from frac_diff import frac_diff_df
 
 polars.Config.set_tbl_cols(-1).set_tbl_width_chars(-1)
 
@@ -62,10 +83,10 @@ n_endo_indicate_col_set = {
 }
 
 fraced = frac_diff_cols = (
-    frac_diff(
+    frac_diff_df(
         df,
         ["open", "high", "low", "close"],
-        d=[
+        dd=[
             *[i / 10.0 for i in range(1, 15)],
         ],
     )

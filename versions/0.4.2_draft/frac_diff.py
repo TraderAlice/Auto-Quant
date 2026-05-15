@@ -126,7 +126,7 @@ def frac_diff_exprs(cols: List[str], d: float, threshold: float = 1e-5) -> pl.Ex
 def frac_diff_df(
     df: Union[pl.DataFrame, pl.LazyFrame],
     columns: List[str],
-    d: list[float],
+    dd: list[float],
     threshold: float = 1e-5,
 ) -> pl.LazyFrame:
     """
@@ -151,7 +151,7 @@ def frac_diff_df(
         lf = df
 
     # 创建所有分数差分列的表达式
-    expr_list = [frac_diff_exprs(cols=columns, d=dv, threshold=threshold) for dv in d]
+    expr_list = [frac_diff_exprs(cols=columns, d=dv, threshold=threshold) for dv in dd]
 
     # 一次性添加所有列，提高性能
     lf = lf.with_columns(expr_list)
