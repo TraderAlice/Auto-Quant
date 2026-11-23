@@ -1,6 +1,6 @@
 [project]
 name = "auto-quant"
-version = "0.5.0"
+version = "0.5.1"
 description = "LLM-native autonomous quant research loop — multi-strategy crypto portfolio optimization across regimes."
 readme = "README.md"
 requires-python = ">=3.11,<3.13"
