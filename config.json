@@ -38,8 +38,32 @@
     "name": "binance",
     "key": "",
     "secret": "",
-    "ccxt_config": {},
-    "ccxt_async_config": {},
+    "ccxt_config": {
+      "urls": {
+        "api": {
+          "public": "https://data-api.binance.vision/api/v3"
+        }
+      },
+      "options": {
+        "fetchMarkets": {
+          "types": ["spot"]
+        },
+        "fetchCurrencies": false
+      }
+    },
+    "ccxt_async_config": {
+      "urls": {
+        "api": {
+          "public": "https://data-api.binance.vision/api/v3"
+        }
+      },
+      "options": {
+        "fetchMarkets": {
+          "types": ["spot"]
+        },
+        "fetchCurrencies": false
+      }
+    },
     "pair_whitelist": ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "AVAX/USDT"],
     "pair_blacklist": []
   },
