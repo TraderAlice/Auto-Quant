@@ -38,6 +38,20 @@ class MajorsBreakout(IStrategy):
 
     pair_basket = ["BTC/USDT", "ETH/USDT"]
 
+    def custom_stake_amount(
+        self, pair: str, current_time, current_rate: float, proposed_stake: float,
+        min_stake, max_stake: float, leverage: float, entry_tag: str, side: str,
+        **kwargs,
+    ) -> float:
+        try:
+            df, _ = self.dp.get_analyzed_dataframe(pair, self.timeframe)
+            pen = float(df["close"].iloc[-1] / df["dc_high"].shift(1).iloc[-1] - 1.0)
+        except Exception:
+            return proposed_stake
+        # Breakout-strength conviction: deeper penetration -> larger stake [0.5x, 2x]
+        scale = min(2.0, max(0.5, 1.0 + pen * 200.0))
+        return max(min_stake or 0.0, min(max_stake, proposed_stake * scale))
+
     @informative("4h")
     def populate_indicators_4h(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         dataframe["ema50"] = ta.EMA(dataframe, timeperiod=50)
