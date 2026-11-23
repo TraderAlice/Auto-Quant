@@ -36,7 +36,7 @@ class AltBbMeanRevert(IStrategy):
     exit_profit_only = False
     ignore_roi_if_entry_signal = False
 
-    startup_candle_count: int = 5000
+    startup_candle_count: int = 900
 
     pair_basket = ["SOL/USDT", "AVAX/USDT", "BNB/USDT"]
 
@@ -48,8 +48,9 @@ class AltBbMeanRevert(IStrategy):
 
     @informative("1d")
     def populate_indicators_1d(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        dataframe["ema200"] = ta.EMA(dataframe, timeperiod=200)
+        dataframe["sma20"] = ta.SMA(dataframe, timeperiod=20)
         return dataframe
+
 
 
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
@@ -64,7 +65,7 @@ class AltBbMeanRevert(IStrategy):
             (dataframe["close"] < dataframe["bb_lower"])
             & (dataframe["rsi"] < 40.0)
             & (dataframe["ema50_4h"] > dataframe["ema200_4h"])
-            & (dataframe["close"] > dataframe["ema200_1d"]),
+            & (dataframe["close"] > dataframe["sma20_1d"]),
             "enter_long",
         ] = 1
         return dataframe
