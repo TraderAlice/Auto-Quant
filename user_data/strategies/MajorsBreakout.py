@@ -2,10 +2,10 @@
 MajorsBreakout — majors Donchian breakout with 4h trend gate (momentum paradigm).
 
 Paradigm: breakout (trend-following / momentum)
-Hypothesis: BTC/ETH 1h Donchian-48-channel breakouts confirmed by 4h EMA50 >
-            EMA200 trend gate capture regime-persistent momentum; patient SMA75
-            exit suits breakout family (v0.4.1 narrow). Orthogonal to MR pair —
-            should diversify portfolio correlation and hedge MR winter dynamics.
+Hypothesis: BTC/ETH 1h Donchian-48 breakouts confirmed by 4h EMA50 > EMA200 AND
+            price above the 1d SMA20 (breakout WITH daily trend, not into daily
+            resistance) capture regime-persistent momentum and cut bear-whipsaws;
+            patient SMA75 exit suits breakout family. Orthogonal momentum leg.
 Parent: root (v0.4.1 PerPairMR BTC+ETH branch lineage, standalone)
 Created: round0
 Status: active
@@ -44,6 +44,10 @@ class MajorsBreakout(IStrategy):
         dataframe["ema200"] = ta.EMA(dataframe, timeperiod=200)
         return dataframe
 
+    @informative("1d")
+    def populate_indicators_1d(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+        dataframe["sma20"] = ta.SMA(dataframe, timeperiod=20)
+        return dataframe
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         dc_window = 48
         dataframe["dc_high"] = dataframe["high"].rolling(dc_window, min_periods=dc_window).max()
@@ -53,7 +57,8 @@ class MajorsBreakout(IStrategy):
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         dataframe.loc[
             (dataframe["close"] > dataframe["dc_high"].shift(1))
-            & (dataframe["ema50_4h"] > dataframe["ema200_4h"]),
+            & (dataframe["ema50_4h"] > dataframe["ema200_4h"])
+            & (dataframe["close"] > dataframe["sma20_1d"]),
             "enter_long",
         ] = 1
         return dataframe
