@@ -63,7 +63,7 @@ class AltBbMeanRevert(IStrategy):
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         dataframe.loc[
             (dataframe["close"] < dataframe["bb_lower"])
-            & (dataframe["rsi"] < 40.0)
+            & (dataframe["rsi"] < 30.0)
             & (dataframe["ema50_4h"] > dataframe["ema200_4h"])
             & (dataframe["close"] > dataframe["sma20_1d"]),
             "enter_long",
