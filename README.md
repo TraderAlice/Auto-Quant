@@ -100,6 +100,19 @@ Plus:
   sizing ablation and never broken across the next 20 rounds. Five new
   cross-version findings + four reinforcements + two narrows of prior
   universal claims. See [retrospective](versions/0.4.1/retrospective.md).
+- **v0.5.0** ([archive](versions/0.5.0/)): upgrades the oracle from isolated
+  per-trade Sharpe to **true daily equity-curve portfolio analytics +
+  cross-strategy `PORTFOLIO_SUMMARY`** (`daily_sharpe`, `daily_sortino`,
+  `calmar`, `ulcer_index` / `martin_ratio`, OLS `alpha` / `beta` / `info_ratio`
+  vs BaH, `time_in_market_pct`, `effective_pairs`, regime-calibrated return &
+  exposure gates, 3D kill-aware Pareto check, pairwise daily & loss-day tail
+  correlations, and leave-one-out `marginal_robust_sharpe`). Validated in a
+  20-minute `omp` + `Muse Spark 1.3` sprint (13 rounds): **first 3-strategy
+  lineup where 3/3 slots pass all gates on the 3D Pareto frontier**, achieving
+  combined `portfolio_robust_sharpe = 0.974` (`1.163` R6 peak), 5y daily Sharpe
+  **1.715** (vs 1.148 BaH) at `-2.84%` max DD, `+8.00%` annualized $\alpha$ at
+  `beta = 0.001`, and negative loss-day tail correlations (`-0.19` to `-0.39`).
+  See [retrospective](versions/0.5.0/retrospective.md).
 
 ## Requirements
 
