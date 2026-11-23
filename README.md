@@ -39,25 +39,34 @@ Four things that matter:
 - **`prepare.py`** — one-time data download from Binance via FreqTrade's Python
   API. Downloads 1h, 4h, and 1d OHLCV for both pairs (v0.3.0+ uses the extra
   timeframes via the `@informative` decorator). The agent does not touch this.
-- **`run.py`** — in-process **batch backtest**. Discovers every `.py` under
-  `user_data/strategies/` (skipping files prefixed `_`), runs FreqTrade's
-  `Backtesting` for each, and prints one `---` summary block per strategy.
-  The agent does not touch this.
+- **`run.py`** — in-process **portfolio & multi-regime oracle** (v0.5.0).
+  Discovers every `.py` under `user_data/strategies/` (skipping `_` files),
+  runs FreqTrade's `Backtesting` across the 4 canonical regimes (`bull_2021`,
+  `winter_2022`, `recovery_23_25`, `full_5y`), reconstructs true daily equity
+  curves (`daily_sharpe`, `daily_sortino`, `calmar`, `ulcer_index`,
+  `martin_ratio`, OLS `alpha`/`beta`/`info_ratio` vs BaH, `time_in_market_pct`,
+  `effective_pairs`), evaluates regime-calibrated + 3D kill-aware Pareto gates,
+  and emits a cross-strategy **`PORTFOLIO_SUMMARY`** block combining all active
+  slots (`portfolio_robust_sharpe`, `diversification_gain`, pairwise daily/tail
+  correlations, and leave-one-out `marginal_robust_sharpe` `[ACCRETIVE]` /
+  `[DILUTIVE]`). The agent does not touch this.
 - **`user_data/strategies/`** — **the directory the agent owns**. Each `.py`
   is one strategy; up to 3 active at a time. Agent creates / evolves / forks
   / kills strategies here. Strategies evaluate on 1h base across the 5-pair
-  portfolio, and can opt into 4h/1d context AND/or cross-pair signals via
-  FreqTrade's `@informative` decorator (see `_template.py.example` for the
-  pattern). `run.py` reports per-pair metrics alongside the aggregate.
+  portfolio (or declared `pair_basket`), and can opt into 4h/1d context AND/or
+  cross-pair signals via FreqTrade's `@informative` decorator (see
+  `_template.py.example` for the pattern). `run.py` reports per-pair metrics
+  alongside the aggregate and combined portfolio rollup.
 
 Plus:
 
 - **`program.md`** — the autonomous-research instructions the human points the
   LLM agent at.
-- **`results.tsv`** — event log. Schema: `commit | event | strategy_name | sharpe | max_dd | note`.
-  Events: `create | evolve | stable | fork | kill`. Gitignored so it survives
-  `git reset --hard` — past lessons stay available even when experimental
-  commits get thrown away.
+- **`results.tsv`** — 10-column event log. Schema:
+  `commit | event | strategy_name | robust_sharpe | robust_sortino | cagr_pct | max_dd | alpha_pct | marginal_sharpe | note`.
+  Events: `create | evolve | stable | fork | kill | portfolio`. Gitignored so it
+  survives `git reset --hard` — past lessons stay available even when
+  experimental commits get thrown away.
 - **`analysis.ipynb`** — post-hoc read: per-strategy trajectories, cap
   utilization, event distribution, note word frequency.
 
