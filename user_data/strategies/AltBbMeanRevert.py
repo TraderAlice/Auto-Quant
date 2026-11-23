@@ -6,8 +6,8 @@ Hypothesis: SOL/AVAX/BNB touches of the 1h BB(20,2) lower band that also hold
             RSI(14) < 40 AND sit above the 4h EMA50 > EMA200 uptrend revert to
             the basis within days; the 4h gate (v0.4.1 gold filter) silences
             entries in structural downtrends where band-touches cascade. Tight
-            RSI > 55 exit suits counter-trend family. Equal-weight sizing first
-            to test signal purity before adding conviction scaling.
+            RSI > 55 exit suits counter-trend family. RSI-depth conviction sizing
+            (30/RSI in [0.5,2]) redistributes stake toward deeper dislocations.
 Parent: AltsCrashRebound (slot replacement; signal paradigm swap DD-trigger -> BB-touch + trend gate)
 Created: round1
 Status: active
@@ -39,6 +39,19 @@ class AltBbMeanRevert(IStrategy):
     startup_candle_count: int = 900
 
     pair_basket = ["SOL/USDT", "AVAX/USDT", "BNB/USDT"]
+
+    def custom_stake_amount(
+        self, pair: str, current_time, current_rate: float, proposed_stake: float,
+        min_stake, max_stake: float, leverage: float, entry_tag: str, side: str,
+        **kwargs,
+    ) -> float:
+        try:
+            df, _ = self.dp.get_analyzed_dataframe(pair, self.timeframe)
+            rsi = float(df["rsi"].iloc[-1])
+        except Exception:
+            return proposed_stake
+        scale = min(2.0, max(0.5, 30.0 / max(rsi, 1.0)))
+        return max(min_stake or 0.0, min(max_stake, proposed_stake * scale))
 
     @informative("4h")
     def populate_indicators_4h(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
