@@ -2,20 +2,21 @@
 BnbMeanRevert — BNB-only RSI mean-reversion baseline (proven robust-positive family).
 
 Paradigm: mean-reversion
-Hypothesis: BNB/USDT 1h RSI(14) < 25 reverts toward RSI > 55 within ~10 days across
-            all regimes; BNB winter drawdowns are shallower than alts so long-only
-            MR stays regime-robust. RSI-depth conviction sizing redistributes stake
-            toward deeper (higher edge) dislocations.
+Hypothesis: BNB/USDT 1h RSI(14) < 25 reverts within ~10 days across all regimes;
+            exits are regime-conditional (R9 lesson): above the 1d SMA20 uptrend
+            hold for RSI > 65 to let recovery runners extend; below it exit fast
+            at RSI > 55 to avoid bear-leg giveback. RSI-depth conviction sizing
+            redistributes stake toward deeper dislocations.
 Parent: root (v0.4.1 BNBMeanRevertSharp/BNBSizedConviction lineage, re-derived)
 Created: round0
 Status: active
-Uses MTF: no
+Uses MTF: yes (1d SMA20 exit regime)
 """
 
 from pandas import DataFrame
 import talib.abstract as ta
 
-from freqtrade.strategy import IStrategy
+from freqtrade.strategy import IStrategy, informative
 
 
 class BnbMeanRevert(IStrategy):
@@ -34,7 +35,7 @@ class BnbMeanRevert(IStrategy):
     exit_profit_only = False
     ignore_roi_if_entry_signal = False
 
-    startup_candle_count: int = 30
+    startup_candle_count: int = 500
 
     pair_basket = ["BNB/USDT"]
 
@@ -61,6 +62,13 @@ class BnbMeanRevert(IStrategy):
         dataframe.loc[(dataframe["rsi"] < 25), "enter_long"] = 1
         return dataframe
 
+    @informative("1d")
+    def populate_indicators_1d(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+        dataframe["sma20"] = ta.SMA(dataframe, timeperiod=20)
+        return dataframe
+
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        dataframe.loc[(dataframe["rsi"] > 55), "exit_long"] = 1
+        above = dataframe["close"] > dataframe["sma20_1d"]
+        # Uptrend: hold for RSI > 65 (let runners extend); else exit fast at 55.
+        dataframe.loc[(dataframe["rsi"] > 65) | ((dataframe["rsi"] > 55) & ~above), "exit_long"] = 1
         return dataframe
