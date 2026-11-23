@@ -3,20 +3,19 @@ BnbMeanRevert — BNB-only RSI mean-reversion baseline (proven robust-positive f
 
 Paradigm: mean-reversion
 Hypothesis: BNB/USDT 1h RSI(14) < 25 reverts toward RSI > 55 within ~10 days across
-            all regimes; second leg buys shallow pullbacks (RSI < 35) only when
-            price holds above the 1d SMA20 uptrend, adding recovery-regime trades
-            where deep dislocations are rare while staying silent in winter.
-            RSI-depth conviction sizing redistributes stake toward deeper dislocations.
+            all regimes; BNB winter drawdowns are shallower than alts so long-only
+            MR stays regime-robust. RSI-depth conviction sizing redistributes stake
+            toward deeper (higher edge) dislocations.
 Parent: root (v0.4.1 BNBMeanRevertSharp/BNBSizedConviction lineage, re-derived)
 Created: round0
 Status: active
-Uses MTF: yes
+Uses MTF: no
 """
 
 from pandas import DataFrame
 import talib.abstract as ta
 
-from freqtrade.strategy import IStrategy, informative
+from freqtrade.strategy import IStrategy
 
 
 class BnbMeanRevert(IStrategy):
@@ -35,7 +34,7 @@ class BnbMeanRevert(IStrategy):
     exit_profit_only = False
     ignore_roi_if_entry_signal = False
 
-    startup_candle_count: int = 500
+    startup_candle_count: int = 30
 
     pair_basket = ["BNB/USDT"]
 
@@ -58,19 +57,8 @@ class BnbMeanRevert(IStrategy):
         dataframe["sma20"] = ta.SMA(dataframe, timeperiod=20)
         return dataframe
 
-    @informative("1d")
-    def populate_indicators_1d(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        dataframe["sma20"] = ta.SMA(dataframe, timeperiod=20)
-        return dataframe
-
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        deep = dataframe["rsi"] < 25
-        shallow = (
-            (dataframe["rsi"] < 30.0)
-            & (dataframe["close"] > dataframe["sma20_1d"])
-            & (dataframe["sma20_1d"] > dataframe["sma20_1d"].shift(24))
-        )
-        dataframe.loc[deep | shallow, "enter_long"] = 1
+        dataframe.loc[(dataframe["rsi"] < 25), "enter_long"] = 1
         return dataframe
 
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
