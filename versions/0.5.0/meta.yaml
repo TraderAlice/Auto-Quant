@@ -1,0 +1,132 @@
+version: 0.5.0
+title: portfolio-level oracle + daily curve decomposition — first 3/3 all-gate-passing portfolio
+date_started: 2026-11-22
+date_completed: 2026-11-22
+branch: autoresearch/nov22-v0.5.0-muse
+git_tag: v0.5.0
+harness_agent: omp v19.1.0 + opencode-go/muse-spark-1.3-contributor (thinking=high, 20m budget)
+peak_commit: 53b6840               # round 12 converged state — 3/3 strategies PASS all gates + non-dominated 3D Pareto frontier
+portfolio_robust_peak_commit: f816be0  # round 6 — PORTFOLIO_EQ robust_sharpe 1.1626, sortino 2.0004, div_gain +0.7896
+
+intervention:
+  summary: |
+    Upgraded run.py + program.md from isolated per-trade strategy Sharpe to a
+    full multi-strategy daily portfolio evaluation system:
+    (1) True daily equity-curve analytics (`daily_sharpe`, `daily_sortino`,
+        `cagr_pct`, `calmar`, `ulcer_index`, `martin_ratio`, `max_dd_days`),
+        fixing the legacy FreqTrade per-trade stddev denominator mismatch vs BaH.
+    (2) Benchmark OLS decomposition (`alpha_ann_pct`, `beta`, `info_ratio`) vs
+        equal-weight Buy-and-Hold + exact merged `time_in_market_pct`,
+        `capital_util_pct`, and inverse-HHI `effective_pairs`.
+    (3) Calibrated multi-objective gates:
+        - `regime_return_gate` (bull/rec >= +10%, full_5y >= +20%, bear >= -2%
+          capital preservation and beating BaH)
+        - `exposure_gate` (worst avg stake >= 5%, time_in_market >= 2%)
+        - `pareto_dominated_by` on 3D `(robust_sharpe, cagr_pct, max_dd)`
+          decoupled from killed strategies.
+    (4) Cross-strategy `PORTFOLIO_SUMMARY` (`PORTFOLIO_EQ`):
+        `portfolio_robust_sharpe`, `portfolio_robust_sortino`,
+        `diversification_gain`, pairwise daily & drawdown-day tail correlations
+        (`diversification_gate < 0.60`), and leave-one-out
+        `marginal_robust_sharpe` (`[ACCRETIVE]` vs `[DILUTIVE]`).
+
+asset:
+  pairs: [BTC/USDT, ETH/USDT, SOL/USDT, BNB/USDT, AVAX/USDT]
+  timeframes_base: 1h
+  timeframes_informative: [4h, 1d]
+  timerange: 20210101-20251231
+  test_timeranges:
+    - {label: bull_2021, range: "20210101-20211231"}
+    - {label: winter_2022, range: "20220101-20221231"}
+    - {label: recovery_23_25, range: "20230101-20251231"}
+    - {label: full_5y, range: "20210101-20251231"}
+  exchange: binance
+
+experiments:
+  wall_clock_minutes: 20
+  rounds: 13  # R0..R12 converged; R13 attempted at 20m boundary and reverted cleanly
+  canonical_rows: 53
+  events_by_type:
+    create: 4
+    evolve: 11
+    kill: 1
+    stable: 24
+    portfolio: 13
+  strategies_ever_created: 4
+  strategies_alive_at_end: 3
+  all_gates_pass_at_end: true
+
+final_portfolio:
+  commit: 53b6840
+  portfolio_robust_sharpe: 0.9741
+  portfolio_robust_sortino: 1.6485
+  portfolio_full_sharpe: 1.7146
+  portfolio_full_sortino: 3.9555
+  portfolio_full_cagr_pct: 7.9940
+  portfolio_full_profit_pct: 46.92
+  portfolio_worst_dd_pct: -2.8434
+  portfolio_calmar: 2.8114
+  portfolio_martin_ratio: 7.4164
+  portfolio_alpha_ann_pct: 8.0012
+  portfolio_beta: 0.0011
+  diversification_gain: 0.3807
+  max_pairwise_daily_corr: 0.075
+  pairwise_tail_corr:
+    AltBbMeanRevert_BnbMeanRevert: -0.194
+    AltBbMeanRevert_MajorsBreakout: -0.307
+    BnbMeanRevert_MajorsBreakout: -0.390
+  slots:
+    - name: AltBbMeanRevert
+      paradigm: alts_bb_lower_mr_mtf
+      basket: [SOL/USDT, AVAX/USDT, BNB/USDT]
+      robust_sharpe: 0.6054
+      robust_sortino: 0.9095
+      full_cagr_pct: 8.7483
+      worst_dd_pct: -5.4759
+      marginal_robust_sharpe: 0.1622
+      marginal_full_sharpe: 0.4708
+      gates: ALL_PASS_3D_FRONTIER
+    - name: BnbMeanRevert
+      paradigm: bnb_rsi_mr_regime_conditional_exit
+      basket: [BNB/USDT]
+      robust_sharpe: 0.6441
+      robust_sortino: 1.0717
+      full_cagr_pct: 5.6213
+      worst_dd_pct: -4.0296
+      marginal_robust_sharpe: 0.1805
+      marginal_full_sharpe: 0.2353
+      gates: ALL_PASS_3D_FRONTIER
+    - name: MajorsBreakout
+      paradigm: majors_donchian_breakout_mtf
+      basket: [BTC/USDT, ETH/USDT]
+      robust_sharpe: 0.5307
+      robust_sortino: 1.2355
+      full_cagr_pct: 9.0517
+      worst_dd_pct: -6.4693
+      marginal_robust_sharpe: 0.1415
+      marginal_full_sharpe: 0.0886
+      gates: ALL_PASS_3D_FRONTIER
+
+findings:
+  - id: F1
+    title: Marginal portfolio Sharpe prevents premature rollback of winter-hedging components
+    summary: |
+      In R4-R5, BnbMeanRevert's standalone robust_sharpe briefly turned slightly
+      negative (-0.024) on recovery, yet PORTFOLIO_SUMMARY showed it remained
+      strongly [ACCRETIVE] (+0.41 marginal_robust_sharpe) by hedging 2022 winter.
+      Keeping the slot alive allowed R7 ablation + R11 synthesis to unlock 0.6441.
+  - id: F2
+    title: Regime-conditional exits resolve the MR patient-vs-tight exit dilemma
+    summary: |
+      Unconditional slow exit (RSI > 65, R9) collapsed BnbMeanRevert from +0.38
+      to -0.06; unconditional fast exit (RSI > 55) capped recovery at +4.78%.
+      Conditioning exit threshold on `close > sma20_1d` (RSI > 65 in uptrends,
+      RSI > 55 below) lifted recovery to +10.35% on identical 80 trades and
+      pushed standalone robust_sharpe from 0.3808 to 0.6441.
+  - id: F3
+    title: Orthogonal MTF paradigms achieve negative drawdown-day tail correlation
+    summary: |
+      Combining alts BB-MR, BNB extreme-RSI MR, and BTC/ETH Donchian breakout
+      produced near-zero daily correlation (<= 0.075) and strictly negative
+      loss-day tail correlation (-0.194 to -0.390), lifting 5y portfolio daily
+      Sharpe to 1.7146 (vs 1.1482 BaH) at beta = 0.0011 and -2.84% max DD.
