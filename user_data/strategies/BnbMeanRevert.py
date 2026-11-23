@@ -65,7 +65,11 @@ class BnbMeanRevert(IStrategy):
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         deep = dataframe["rsi"] < 25
-        shallow = (dataframe["rsi"] < 35.0) & (dataframe["close"] > dataframe["sma20_1d"])
+        shallow = (
+            (dataframe["rsi"] < 30.0)
+            & (dataframe["close"] > dataframe["sma20_1d"])
+            & (dataframe["sma20_1d"] > dataframe["sma20_1d"].shift(24))
+        )
         dataframe.loc[deep | shallow, "enter_long"] = 1
         return dataframe
 
