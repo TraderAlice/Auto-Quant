@@ -1,4 +1,4 @@
-# Auto-Quant v0.5.0 — True Portfolio Optimization + Cross-Regime Risk Decomposition
+# Auto-Quant v0.5.1 — True Daily Mark-to-Market Portfolio Optimization
 
 This is an autonomous quantitative research loop where the LLM evolves a
 **multi-strategy crypto spot portfolio** (up to 3 active strategies) that can:
@@ -11,20 +11,32 @@ This is an autonomous quantitative research loop where the LLM evolves a
 - optimize both **single-strategy risk quality** AND **combined cross-strategy
   portfolio synergy** (`PORTFOLIO_SUMMARY`)
 
-## What changed in v0.5.0 (and why)
+## What changed in v0.5.1 (and why)
 
-Prior versions (v0.1.0 → v0.4.1) evaluated up to 3 strategies completely in
-isolation and relied on FreqTrade's per-trade `sharpe` formula (which divided
-daily mean return by *per-trade* standard deviation, making it incomparable to
-daily Buy-and-Hold Sharpe and punishing upside breakouts). v0.4.1 also surfaced
-two structural bottlenecks: a flat `+20%` winter profit floor that was
-physically unreachable in a `-75%` spot-only bear market, and "early Pareto
-lock" where a killed single-pair strategy permanently dominated later paradigms
-on 2D `(sharpe, max_dd)`.
+v0.5.0 reconstructed daily equity curves by booking each trade's `profit_abs`
+entirely on its `close_date`, leaving open-position days at `0%` return. While
+that fixed FreqTrade's per-trade Sharpe distortion, realized-only daily curves
+masked floating drawdowns on hold-and-pray trades (`stoploss = -0.99`),
+understated passive market `beta`, and made cross-strategy loss-day tail
+correlations look artificially negative whenever positions closed on different
+days.
 
-**v0.5.0 upgrades the oracle (`run.py`) along three axes:**
+**v0.5.1 upgrades `run.py` to true daily Mark-to-Market (MTM) equity curves:**
+- Every open position at end-of-day UTC (`open_day <= d < close_day`) is valued
+  at the pair's `1d` UTC close price, fee-inclusive (matching FreqTrade's
+  `LocalTrade.calculate_profit` mark-to-liquidation convention, including
+  multi-order DCA / partial exits).
+- Closed trades transition seamlessly to exact `profit_abs` on `close_day`,
+  preserving the exact telescoping return identity `(1 + r).prod() == final_eq / start_eq`.
+- All downstream metrics — `daily_sharpe`, `daily_sortino`, `max_drawdown_pct`
+  (now displaying `mtm_dd` alongside `ft_realized_dd`), `ulcer_index`,
+  `martin_ratio`, OLS `alpha` / `beta`, `pairwise_daily_corr`,
+  `pairwise_tail_corr`, and `PORTFOLIO_SUMMARY` — now reflect true daily
+  in-position market risk.
 
-1. **True Daily Equity-Curve Portfolio Analytics (per strategy & regime)**
+### Core Oracle Pillars (v0.5.0 → v0.5.1)
+
+1. **True Daily MTM Equity-Curve Portfolio Analytics (per strategy & regime)**
    - **`daily_sharpe` & `daily_sortino`**: annualized ($\sqrt{365}$) from the
      reconstructed daily equity curve — directly apples-to-apples with
      `bah_sharpe`, with `daily_sortino` avoiding unfair penalties on upside
@@ -80,9 +92,9 @@ To set up a new experiment:
    - `README.md` — project history
    - `config.json` — fixed FreqTrade config (`5` pairs, `1h` base, `0.1%` fee). Do not modify.
    - `prepare.py` — data check/download. Do not modify.
-   - `run.py` — the v0.5.0 portfolio & multi-regime oracle. Do not modify.
+   - `run.py` — the v0.5.1 daily MTM portfolio & multi-regime oracle. Do not modify.
    - `user_data/strategies/_template.py.example` — strategy skeleton.
-   - `versions/0.4.1/retrospective.md` — key findings from prior runs.
+   - `versions/0.5.0/retrospective.md` — key findings from prior runs.
 3. **Verify data exists**: Check that all 15 feather files exist under
    `user_data/data/` (`{BTC,ETH,SOL,BNB,AVAX}_USDT-{1h,4h,1d}.feather`).
 4. **Initialize `results.tsv`** (if it doesn't already exist) with the 10-column
@@ -150,7 +162,7 @@ To set up a new experiment:
 
 ---
 
-## Reading `run.py` v0.5.0 Output
+## Reading `run.py` v0.5.1 Output
 
 Quick scan of strategy summaries + portfolio rollup:
 ```bash
@@ -221,7 +233,7 @@ gate status, and portfolio correlation/marginal impact.
    stays intact because it is gitignored!).
 9. **Repeat continuously** without stopping to ask the human!
 
-### Keep vs. Kill Criteria (v0.5.0)
+### Keep vs. Kill Criteria (v0.5.1)
 
 Keep / evolve a strategy when:
 1. It is **`[ACCRETIVE]`** to `portfolio_robust_sharpe` (or `marginal_full_sharpe`
@@ -243,7 +255,9 @@ Kill / replace a strategy when:
 ### Goodhart Watch
 
 Never use `exit_profit_only=True`, micro-ROI clipping (`minimal_roi` < 1% to
-compress return variance), or sub-5% stake shrinking. Watch `alpha_ann_pct`,
-`cagr_pct`, `exposure_gate`, and `regime_return_gate` alongside Sharpe: real
-improvements lift risk-adjusted return AND economic return/portfolio synergy
-together.
+compress return variance), or sub-5% stake shrinking. Under v0.5.1's daily MTM
+oracle, hold-and-pray (`stoploss = -0.99`) floating drawdowns are directly
+exposed in `mtm_dd`, `ulcer_index`, `beta`, and `pairwise_tail_corr` — check
+`mtm_dd` vs `ft_realized_dd` alongside `alpha_ann_pct`, `cagr_pct`,
+`exposure_gate`, and `regime_return_gate`: real improvements lift risk-adjusted
+return AND economic return/portfolio synergy together.

@@ -39,12 +39,15 @@ Four things that matter:
 - **`prepare.py`** — one-time data download from Binance via FreqTrade's Python
   API. Downloads 1h, 4h, and 1d OHLCV for both pairs (v0.3.0+ uses the extra
   timeframes via the `@informative` decorator). The agent does not touch this.
-- **`run.py`** — in-process **portfolio & multi-regime oracle** (v0.5.0).
+- **`run.py`** — in-process **portfolio & multi-regime oracle** (v0.5.1).
   Discovers every `.py` under `user_data/strategies/` (skipping `_` files),
   runs FreqTrade's `Backtesting` across the 4 canonical regimes (`bull_2021`,
-  `winter_2022`, `recovery_23_25`, `full_5y`), reconstructs true daily equity
-  curves (`daily_sharpe`, `daily_sortino`, `calmar`, `ulcer_index`,
-  `martin_ratio`, OLS `alpha`/`beta`/`info_ratio` vs BaH, `time_in_market_pct`,
+  `winter_2022`, `recovery_23_25`, `full_5y`), reconstructs true daily
+  **Mark-to-Market (MTM)** equity curves (realized PnL + fee-inclusive EOD
+  unrealized PnL of open positions at `1d` UTC closes, exposing floating
+  drawdowns, true `beta`, and real cross-strategy tail correlations alongside
+  `daily_sharpe`, `daily_sortino`, `calmar`, `ulcer_index`, `martin_ratio`,
+  OLS `alpha`/`beta`/`info_ratio` vs BaH, `time_in_market_pct`, and
   `effective_pairs`), evaluates regime-calibrated + 3D kill-aware Pareto gates,
   and emits a cross-strategy **`PORTFOLIO_SUMMARY`** block combining all active
   slots (`portfolio_robust_sharpe`, `diversification_gain`, pairwise daily/tail
@@ -113,6 +116,12 @@ Plus:
   **1.715** (vs 1.148 BaH) at `-2.84%` max DD, `+8.00%` annualized $\alpha$ at
   `beta = 0.001`, and negative loss-day tail correlations (`-0.19` to `-0.39`).
   See [retrospective](versions/0.5.0/retrospective.md).
+- **v0.5.1** *(scaffold)*: upgrades `run.py` from close-day realized PnL to
+  **true daily Mark-to-Market (MTM) equity curves** — valuing every open
+  position at EOD UTC `1d` close prices (fee-inclusive, DCA/partial-exit aware)
+  and reporting `mtm_dd` alongside `ft_realized_dd`. Eliminates the realized-only
+  illusions around floating drawdown, near-zero `beta`, and artificial negative
+  loss-day tail correlations on hold-and-pray strategies.
 
 ## Requirements
 

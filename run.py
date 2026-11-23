@@ -1,15 +1,17 @@
 """
-run.py — READ-ONLY. The v0.5.0 Portfolio & Multi-Regime Oracle. Do not modify.
+run.py — READ-ONLY. The v0.5.1 Portfolio & Multi-Regime Oracle (Daily MTM). Do not modify.
 
 For each strategy in `user_data/strategies/`, runs FreqTrade's Backtesting
 in-process across declared (or canonical 4-regime) timeranges and pair baskets,
-reconstructs daily portfolio equity curves, and emits:
+reconstructs true daily Mark-to-Market (MTM) portfolio equity curves (realized
+PnL + end-of-day unrealized PnL of all open positions valued at 1d UTC closes,
+fee-inclusive), and emits:
 
 1. Per-(strategy, timerange) blocks with:
-   - True daily equity-curve metrics: `daily_sharpe` (apples-to-apples with BaH),
+   - True daily MTM equity-curve metrics: `daily_sharpe` (apples-to-apples with BaH),
      `daily_sortino`, `cagr_pct`, `calmar`, `ulcer_index`, `martin_ratio`,
-     `max_drawdown_pct`, `max_dd_days` (longest underwater duration), plus
-     legacy `ft_sharpe`
+     `max_drawdown_pct` (capturing EOD floating drawdown, not just realized-on-close),
+     `max_dd_days` (longest underwater duration), plus legacy `ft_sharpe`
    - Benchmark decomposition vs equal-weight Buy-and-Hold (`bah_*`):
      `alpha_ann_pct` (Jensen's alpha), `beta`, `info_ratio`
    - Capital utilization & internal diversification:
@@ -28,7 +30,7 @@ reconstructs daily portfolio equity curves, and emits:
 
 3. Cross-strategy `PORTFOLIO_SUMMARY` block (when >= 1 strategy succeeds):
    - Combines all active strategies into an equal-weight multi-strategy portfolio
-     across all common timeranges
+     across all common timeranges using their daily MTM return series
    - Reports `portfolio_robust_sharpe`, `portfolio_robust_sortino`,
      `portfolio_full_cagr_pct`, `portfolio_worst_dd_pct`, `portfolio_martin_ratio`,
      `portfolio_alpha_ann_pct`, `portfolio_beta`, and `diversification_gain`
@@ -308,6 +310,47 @@ def compute_benchmark_decomposition(
 
 
 # ---------------------------------------------------------------------------
+# Cached 1d OHLCV closes (UTC EOD close for each day)
+# ---------------------------------------------------------------------------
+_DAILY_CLOSE_CACHE: dict[str, pd.Series | None] = {}
+
+
+def _load_daily_close(pair: str) -> pd.Series | None:
+    """Load UTC end-of-day close series indexed by normalized UTC day."""
+    if pair in _DAILY_CLOSE_CACHE:
+        return _DAILY_CLOSE_CACHE[pair]
+    path = DATA_DIR / f"{pair.replace('/', '_')}-1d.feather"
+    if not path.exists():
+        _DAILY_CLOSE_CACHE[pair] = None
+        return None
+    df = pd.read_feather(path, columns=["date", "close"])
+    if df.empty:
+        _DAILY_CLOSE_CACHE[pair] = None
+        return None
+    dates = pd.to_datetime(df["date"])
+    if dates.dt.tz is None:
+        dates = dates.dt.tz_localize("UTC")
+    else:
+        dates = dates.dt.tz_convert("UTC")
+    df = df.assign(day=dates.dt.normalize()).drop_duplicates("day").sort_values("day")
+    series = df.set_index("day")["close"].astype(float)
+    _DAILY_CLOSE_CACHE[pair] = series
+    return series
+
+
+def _aligned_daily_close(pair: str, days: pd.DatetimeIndex) -> np.ndarray | None:
+    """Return float ndarray of EOD close prices aligned to `days` (ffill/bfill safe)."""
+    series = _load_daily_close(pair)
+    if series is None or series.empty:
+        return None
+    # Reindex over union so leading days before window start can ffill cleanly
+    aligned = series.reindex(days.union(series.index)).sort_index().ffill().bfill().reindex(days)
+    if aligned.isna().any():
+        return None
+    return aligned.to_numpy(dtype=float)
+
+
+# ---------------------------------------------------------------------------
 # Buy-and-hold benchmark — equal-weight portfolio over 1d feathers
 # ---------------------------------------------------------------------------
 def compute_bah_benchmark(
@@ -319,21 +362,17 @@ def compute_bah_benchmark(
     pair_summary: dict[str, dict[str, float]] = {}
 
     for pair in pairs:
-        path = DATA_DIR / f"{pair.replace('/', '_')}-1d.feather"
-        if not path.exists():
+        close_s = _load_daily_close(pair)
+        if close_s is None:
             continue
-        df = pd.read_feather(path)
-        if df["date"].dt.tz is None:
-            df["date"] = df["date"].dt.tz_localize("UTC")
-        df["day"] = df["date"].dt.normalize()
-        df = df[(df["day"] >= start) & (df["day"] <= end)].drop_duplicates("day").sort_values("day")
-        if len(df) < 2:
+        sub = close_s[(close_s.index >= start) & (close_s.index <= end)]
+        if len(sub) < 2:
             continue
-        ret = df.set_index("day")["close"].pct_change().fillna(0.0)
+        ret = sub.pct_change().fillna(0.0)
         aligned_ret = ret.reindex(days, fill_value=0.0)
         pair_returns[pair] = aligned_ret
 
-        first, last = float(df["close"].iloc[0]), float(df["close"].iloc[-1])
+        first, last = float(sub.iloc[0]), float(sub.iloc[-1])
         cum = (1.0 + aligned_ret).cumprod()
         dd = float((cum / cum.cummax() - 1.0).min() * 100.0)
         pair_summary[pair] = {
@@ -409,6 +448,98 @@ def _to_utc_ts(val: Any) -> pd.Timestamp | None:
         return None
 
 
+def _add_trade_unrealized_mtm(
+    trade: dict[str, Any],
+    start: pd.Timestamp,
+    i0: int,
+    i1: int,
+    close_arr: np.ndarray,
+    unrealized_arr: np.ndarray,
+) -> None:
+    """Add fee-inclusive EOD mark-to-market unrealized PnL for an open trade on days [i0, i1).
+
+    Matches FreqTrade's `LocalTrade.calculate_profit(rate)` mark-to-liquidation
+    convention (open fee sunk at entry + estimated close fee at EOD close).
+    Handles both standard single-entry trades (vectorized) and multi-order
+    position-adjusted (DCA / partial-exit) trades via `trade["orders"]`.
+    """
+    is_short = bool(trade.get("is_short", False))
+    fee_open = _get(trade, "fee_open", default=0.0)
+    fee_close = _get(trade, "fee_close", default=0.0)
+    orders = trade.get("orders")
+
+    # Multi-order trade (position adjustments / partial exits): replay fills by day
+    if isinstance(orders, list) and len(orders) > 2:
+        parsed_orders: list[tuple[int, bool, float, float]] = []
+        for o in orders:
+            ts_ms = o.get("order_filled_timestamp")
+            if ts_ms is None:
+                continue
+            try:
+                f_day = pd.Timestamp(int(ts_ms), unit="ms", tz="UTC").normalize()
+            except Exception:
+                continue
+            f_idx = int((f_day - start).days)
+            amt = _get(o, "amount", default=0.0)
+            price = _get(o, "safe_price", "average", "price", default=0.0)
+            if amt <= 0.0 or price <= 0.0:
+                continue
+            is_entry = bool(o.get("ft_is_entry", True))
+            parsed_orders.append((f_idx, is_entry, amt, price))
+
+        if parsed_orders:
+            parsed_orders.sort(key=lambda x: x[0])
+            qty = 0.0
+            cash_delta = 0.0
+            o_ptr = 0
+            n_ord = len(parsed_orders)
+            for k in range(i0, i1):
+                while o_ptr < n_ord and parsed_orders[o_ptr][0] <= k:
+                    _, is_entry, amt, price = parsed_orders[o_ptr]
+                    if not is_short:
+                        if is_entry:
+                            qty += amt
+                            cash_delta -= amt * price * (1.0 + fee_open)
+                        else:
+                            qty -= amt
+                            cash_delta += amt * price * (1.0 - fee_close)
+                    else:
+                        if is_entry:
+                            qty += amt
+                            cash_delta += amt * price * (1.0 - fee_open)
+                        else:
+                            qty -= amt
+                            cash_delta -= amt * price * (1.0 + fee_close)
+                    o_ptr += 1
+
+                if qty > 1e-12:
+                    p_d = close_arr[k]
+                    if not is_short:
+                        unrealized_arr[k] += cash_delta + qty * p_d * (1.0 - fee_close)
+                    else:
+                        unrealized_arr[k] += cash_delta - qty * p_d * (1.0 + fee_close)
+                else:
+                    unrealized_arr[k] += cash_delta
+            return
+
+    # Standard single-entry trade (fast vectorized path)
+    open_rate = _get(trade, "open_rate", default=0.0)
+    qty = _get(trade, "amount", default=0.0)
+    if qty <= 0.0:
+        stake = _get(trade, "stake_amount", default=0.0)
+        qty = (stake / open_rate) if (stake > 0.0 and open_rate > 0.0) else 0.0
+    if qty <= 0.0 or open_rate <= 0.0:
+        return
+
+    prices = close_arr[i0:i1]
+    if not is_short:
+        open_val = qty * open_rate * (1.0 + fee_open)
+        unrealized_arr[i0:i1] += qty * prices * (1.0 - fee_close) - open_val
+    else:
+        open_val = qty * open_rate * (1.0 - fee_open)
+        unrealized_arr[i0:i1] += open_val - qty * prices * (1.0 + fee_close)
+
+
 def extract_strategy_bundle(
     results: dict[str, Any],
     strategy_name: str,
@@ -417,6 +548,7 @@ def extract_strategy_bundle(
     bah: dict[str, Any],
 ) -> dict[str, Any]:
     start, end, days = _timerange_bounds(timerange)
+    n_days = len(days)
     win_end_inclusive = end + pd.Timedelta(days=1)
     total_win_secs = max(1.0, (win_end_inclusive - start).total_seconds())
 
@@ -441,9 +573,11 @@ def extract_strategy_bundle(
     if not ft_agg:
         ft_agg = _entry_metrics(strat)
 
-    # Reconstruct daily equity curve & utilization from trade records
+    # Reconstruct true daily Mark-to-Market equity curve & utilization from trade records
     trades = strat.get("trades") or []
-    daily_pnl = pd.Series(0.0, index=days)
+    realized_daily = np.zeros(n_days, dtype=float)
+    unrealized_daily = np.zeros(n_days, dtype=float)
+    pair_close_cache: dict[str, np.ndarray | None] = {}
     stakes: list[float] = []
     deployed_dollar_secs = 0.0
     intervals: list[tuple[float, float]] = []
@@ -459,14 +593,33 @@ def extract_strategy_bundle(
 
         open_ts = _to_utc_ts(t.get("open_date"))
         close_ts = _to_utc_ts(t.get("close_date"))
+
+        c_idx: int | None = None
         if close_ts is not None:
-            close_day = close_ts.normalize()
-            if close_day in daily_pnl.index:
-                daily_pnl.loc[close_day] += p_abs
-            elif close_day < start:
-                daily_pnl.iloc[0] += p_abs
-            elif close_day > end:
-                daily_pnl.iloc[-1] += p_abs
+            c_idx = int((close_ts.normalize() - start).days)
+            if 0 <= c_idx < n_days:
+                realized_daily[c_idx] += p_abs
+            elif c_idx < 0:
+                realized_daily[0] += p_abs
+            # Note: if c_idx >= n_days (closed after window end), leave realized
+            # out of this window and mark the open position through EOD of `end`.
+
+        # Mark open position at EOD UTC close on every day `d` with open_day <= d < close_day
+        if open_ts is not None and n_days > 0:
+            o_idx = int((open_ts.normalize() - start).days)
+            end_open_idx = c_idx if c_idx is not None else n_days
+            i0 = max(0, o_idx)
+            i1 = min(n_days, end_open_idx)
+            if i1 > i0:
+                pair = str(t.get("pair") or "")
+                if pair:
+                    if pair not in pair_close_cache:
+                        pair_close_cache[pair] = _aligned_daily_close(pair, days)
+                    close_arr = pair_close_cache[pair]
+                    if close_arr is not None:
+                        _add_trade_unrealized_mtm(
+                            t, start, i0, i1, close_arr, unrealized_daily
+                        )
 
         if open_ts is not None and close_ts is not None:
             o_ep = max(win_start_epoch, open_ts.timestamp())
@@ -493,13 +646,14 @@ def extract_strategy_bundle(
     capital_util_pct = (deployed_dollar_secs / (starting_balance * total_win_secs)) * 100.0
     avg_pos_pct = (float(np.mean(stakes)) / starting_balance * 100.0) if stakes else 0.0
 
-    # Telescoping daily return series: (1 + r).prod() == final_equity / starting_balance
-    equity = starting_balance + daily_pnl.cumsum()
+    # Telescoping daily MTM return series: (1 + r).prod() == final_equity / starting_balance
+    equity_vals = starting_balance + np.cumsum(realized_daily) + unrealized_daily
+    equity = pd.Series(equity_vals, index=days).clip(lower=1e-6)
     prev_eq = pd.Series(
         [starting_balance] + equity.iloc[:-1].tolist(),
         index=days,
     ).clip(lower=1e-6)
-    daily_ret = daily_pnl / prev_eq
+    daily_ret = (equity - prev_eq) / prev_eq
 
     curve = compute_curve_metrics(daily_ret)
     decomp = compute_benchmark_decomposition(daily_ret, bah["daily_ret"])
@@ -519,16 +673,23 @@ def extract_strategy_bundle(
         else:
             effective_pairs = 0.0
 
+    effective_max_dd = min(ft_agg["max_drawdown_pct"], curve["max_drawdown_pct"])
+    effective_calmar = (
+        curve["cagr_pct"] / abs(effective_max_dd) if abs(effective_max_dd) > 1e-6 else 0.0
+    )
+
     aggregate = {
         "daily_sharpe": curve["daily_sharpe"],
         "daily_sortino": curve["daily_sortino"],
         "ft_sharpe": ft_agg["ft_sharpe"],
         "cagr_pct": curve["cagr_pct"],
-        "calmar": curve["calmar"],
+        "calmar": effective_calmar,
         "ulcer_index": curve["ulcer_index"],
         "martin_ratio": curve["martin_ratio"],
         "total_profit_pct": ft_agg["total_profit_pct"],
-        "max_drawdown_pct": min(ft_agg["max_drawdown_pct"], curve["max_drawdown_pct"]),
+        "max_drawdown_pct": effective_max_dd,
+        "mtm_drawdown_pct": curve["max_drawdown_pct"],
+        "ft_drawdown_pct": ft_agg["max_drawdown_pct"],
         "max_dd_days": curve["max_dd_days"],
         "trade_count": ft_agg["trade_count"],
         "win_rate_pct": ft_agg["win_rate_pct"],
@@ -887,7 +1048,11 @@ def print_block(
     print(f"daily_sortino:      {agg['daily_sortino']:.4f}")
     print(f"cagr_pct:           {agg['cagr_pct']:.4f}")
     print(f"total_profit_pct:   {agg['total_profit_pct']:.4f}")
-    print(f"max_drawdown_pct:   {agg['max_drawdown_pct']:.4f}   (max_dd_days={int(agg['max_dd_days'])}d)")
+    print(
+        f"max_drawdown_pct:   {agg['max_drawdown_pct']:.4f}   "
+        f"(mtm_dd={agg['mtm_drawdown_pct']:.2f}%, ft_realized_dd={agg['ft_drawdown_pct']:.2f}%, "
+        f"max_dd_days={int(agg['max_dd_days'])}d)"
+    )
     print(f"calmar:             {agg['calmar']:.4f}")
     print(f"ulcer_index:        {agg['ulcer_index']:.4f}")
     print(f"martin_ratio:       {agg['martin_ratio']:.4f}")
