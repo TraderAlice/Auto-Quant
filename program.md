@@ -1,40 +1,59 @@
-# Auto-Quant v0.5.1 — True Daily Mark-to-Market Portfolio Optimization
+# Auto-Quant v0.5.2 — 1x Futures Long/Short + Train/Test Split
 
 This is an autonomous quantitative research loop where the LLM evolves a
-**multi-strategy crypto spot portfolio** (up to 3 active strategies) that can:
+**multi-strategy 1x crypto futures portfolio** (up to 3 active strategies,
+long & short enabled, leverage strictly locked to `1.0x`) that can:
+- trade **both long and short** (`can_short = True`) on Binance USDT-M
+  perpetual futures with real historical funding rates (equivalent to
+  unleveraged spot long + 1x shorting)
 - combine signals across **multiple timeframes** (`1h` base + `4h` + `1d`)
-- reference **multiple assets** (5-pair universe: BTC, ETH, SOL, BNB, AVAX)
+- reference **multiple assets** (5-pair universe: `BTC/USDT:USDT`,
+  `ETH/USDT:USDT`, `SOL/USDT:USDT`, `BNB/USDT:USDT`, `AVAX/USDT:USDT`)
 - declare their **own asset basket** (`pair_basket`)
-- evaluate automatically across **4 canonical market regimes** (`bull_2021`,
-  `winter_2022`, `recovery_23_25`, `full_5y`)
+- evaluate automatically across the configured **training regimes**
+  (`bull_2021`, `winter_2022`, `recovery_23_25`, `full_5y` before `split_date`)
+  while keeping the post-`split_date` window untouched for human OOS evaluation
 - use **dynamic position sizing** via `custom_stake_amount`
 - optimize both **single-strategy risk quality** AND **combined cross-strategy
   portfolio synergy** (`PORTFOLIO_SUMMARY`)
 
-## What changed in v0.5.1 (and why)
+## What changed in v0.5.2 (and why)
 
-v0.5.0 reconstructed daily equity curves by booking each trade's `profit_abs`
-entirely on its `close_date`, leaving open-position days at `0%` return. While
-that fixed FreqTrade's per-trade Sharpe distortion, realized-only daily curves
-masked floating drawdowns on hold-and-pray trades (`stoploss = -0.99`),
-understated passive market `beta`, and made cross-strategy loss-day tail
-correlations look artificially negative whenever positions closed on different
-days.
+Spot-only (long-only) strategies are structurally forced to either sit in cash
+or catch dead-cat bounces during protracted bear regimes (`winter_2022` and
+2026 bear OOS). Meanwhile, keeping train and test windows separated by a clean
+cutoff makes out-of-sample generalization directly measurable.
 
-**v0.5.1 upgrades `run.py` to true daily Mark-to-Market (MTM) equity curves:**
-- Every open position at end-of-day UTC (`open_day <= d < close_day`) is valued
+**v0.5.2 upgrades the scaffold on top of v0.5.1's true daily MTM oracle:**
+1. **1× Unleveraged Futures Long/Short**:
+   - `config.json` switches to Binance USDT-M perpetuals (`trading_mode: "futures"`,
+     `margin_mode: "isolated"`) with `autoquant.max_leverage = 1.0`.
+   - Strategies may set `can_short = True`, emit `enter_short` / `exit_short`,
+     and MUST keep `leverage(...) -> 1.0`. `run.py` enforces the `max_leverage`
+     ceiling on every trade and rejects any strategy exceeding `1.0x`.
+   - Real historical 8h funding payments are automatically settled by FreqTrade
+     and included in each trade's `profit_abs`; `run.py` prints a `sides:` line
+     (`long=N (+X%) short=M (+Y%) funding=+Z USDT (max_lev=1.00x)`, where
+     positive funding = net received and negative = net paid).
+2. **Configurable Bench Settings & Train/Test Split**:
+   - Humans configure `fee`, `autoquant.data_timerange`, `autoquant.split_date`,
+     and `autoquant.max_leverage` in `config.json` *before* starting a run
+     (immutable during the run).
+   - `uv run run.py` defaults to `--split train` (strictly `< split_date`).
+     Post-`split_date` data (`--oos` / `--split test`) is reserved strictly for
+     post-run human out-of-sample evaluation — **never run `--oos` or inspect
+     dates `>= split_date` during the research loop.**
+
+## Core Oracle Pillars (v0.5.0 → v0.5.2)
+
+- **True Daily Mark-to-Market (MTM) Equity Curves (v0.5.1+)**: every open long
+  or short position at end-of-day UTC (`open_day <= d < close_day`) is valued
   at the pair's `1d` UTC close price, fee-inclusive (matching FreqTrade's
   `LocalTrade.calculate_profit` mark-to-liquidation convention, including
-  multi-order DCA / partial exits).
-- Closed trades transition seamlessly to exact `profit_abs` on `close_day`,
-  preserving the exact telescoping return identity `(1 + r).prod() == final_eq / start_eq`.
-- All downstream metrics — `daily_sharpe`, `daily_sortino`, `max_drawdown_pct`
-  (now displaying `mtm_dd` alongside `ft_realized_dd`), `ulcer_index`,
-  `martin_ratio`, OLS `alpha` / `beta`, `pairwise_daily_corr`,
-  `pairwise_tail_corr`, and `PORTFOLIO_SUMMARY` — now reflect true daily
-  in-position market risk.
-
-### Core Oracle Pillars (v0.5.0 → v0.5.1)
+  multi-order DCA / partial exits). Closed trades transition seamlessly to
+  exact `profit_abs` (including funding) on `close_day`, preserving the exact
+  telescoping return identity `(1 + r).prod() == final_eq / start_eq`.
+  `max_drawdown_pct` exposes both `mtm_dd` and `ft_realized_dd`.
 
 1. **True Daily MTM Equity-Curve Portfolio Analytics (per strategy & regime)**
    - **`daily_sharpe` & `daily_sortino`**: annualized ($\sqrt{365}$) from the
@@ -90,13 +109,16 @@ To set up a new experiment:
    if not already on an experiment branch.
 2. **Read the in-scope files**:
    - `README.md` — project history
-   - `config.json` — fixed FreqTrade config (`5` pairs, `1h` base, `0.1%` fee). Do not modify.
+   - `config.json` — fixed bench & FreqTrade config (`5` futures pairs, `1h` base,
+     1× leverage lock, configurable `fee`, `autoquant.data_timerange`,
+     `autoquant.split_date`). Do not modify during a run.
    - `prepare.py` — data check/download. Do not modify.
-   - `run.py` — the v0.5.1 daily MTM portfolio & multi-regime oracle. Do not modify.
+   - `run.py` — the v0.5.2 daily MTM 1× futures portfolio oracle. Do not modify.
    - `user_data/strategies/_template.py.example` — strategy skeleton.
    - `versions/0.5.0/retrospective.md` — key findings from prior runs.
-3. **Verify data exists**: Check that all 15 feather files exist under
-   `user_data/data/` (`{BTC,ETH,SOL,BNB,AVAX}_USDT-{1h,4h,1d}.feather`).
+3. **Verify data exists**: Check that the 25 futures feather files exist under
+   `user_data/data/futures/` (`{BTC,ETH,SOL,BNB,AVAX}_USDT_USDT-{1h,4h,1d}-futures.feather`,
+   plus `-1h-mark.feather` and `-1h-funding_rate.feather`).
 4. **Initialize `results.tsv`** (if it doesn't already exist) with the 10-column
    tab-separated header:
    ```
@@ -107,13 +129,14 @@ To set up a new experiment:
    - Class name MUST match filename stem.
    - Fill all 6 docstring metadata fields (`Paradigm`, `Hypothesis`, `Parent`,
      `Created`, `Status`, `Uses MTF`).
+   - Set `can_short = True` if the strategy trades short (or both sides) and
+     implement `def leverage(...) -> float: return 1.0`.
    - **Each starter MUST target a genuinely orthogonal paradigm** (e.g.
-     mean-reversion + MTF trend/breakout + volatility/regime-rebound) so
-     `PORTFOLIO_SUMMARY` starts with low `pairwise_daily_corr` and positive
-     `diversification_gain`.
-   - Leave `test_timeranges` unset (so all strategies inherit the 4 canonical
-     regimes `bull_2021`, `winter_2022`, `recovery_23_25`, `full_5y` and align
-     in `PORTFOLIO_SUMMARY`).
+     long/short mean-reversion + MTF trend/breakout + bear-regime short or
+     volatility/funding-aware rebound) so `PORTFOLIO_SUMMARY` starts with low
+     `pairwise_daily_corr` and positive `diversification_gain`.
+   - Leave `test_timeranges` unset (so all strategies inherit the active
+     training split's canonical regimes and align in `PORTFOLIO_SUMMARY`).
 6. **Confirm and go** (if running interactively with a human; if launched in
    autonomous/non-interactive mode, proceed directly into the experiment loop
    without pausing!).
@@ -125,33 +148,48 @@ To set up a new experiment:
 ### What you CAN do
 - Create, modify (`evolve`), copy (`fork`), or delete (`git rm`, `kill`)
   strategy `.py` files under `user_data/strategies/` (not prefixed with `_`).
+- Trade long, short, or both (`can_short = True`) at `1.0x` leverage.
 
 ### What you CANNOT do
 - Modify `prepare.py`, `run.py`, `config.json`, or `_template.py.example`.
+- Run `uv run run.py --oos`, `--split test`, `--fee`, or `--timerange` covering
+  dates `>= split_date` — the test split is strictly reserved for post-run
+  human OOS evaluation. Always run plain `uv run run.py > run.log 2>&1`.
+- Use leverage above `autoquant.max_leverage` (`1.0x`) — `run.py` enforces this
+  and rejects `> 1.0x` trades as an error.
 - Add new Python dependencies or call `freqtrade` CLI directly — always run
   `uv run run.py`.
 - Exceed **3 active strategies** at any time.
 - Request timeframes other than `1h`, `4h`, `1d` or pairs outside the 5-pair
-  whitelist (`BTC/USDT`, `ETH/USDT`, `SOL/USDT`, `BNB/USDT`, `AVAX/USDT`).
+  futures whitelist (`BTC/USDT:USDT`, `ETH/USDT:USDT`, `SOL/USDT:USDT`,
+  `BNB/USDT:USDT`, `AVAX/USDT:USDT`).
 
 ### Affordances Recap
 
 1. **Multi-timeframe & Cross-Asset (`@informative`)**:
    - `@informative("4h")` / `@informative("1d")` merges look-ahead-safe
      columns (`rsi_4h`, `ema200_1d`).
-   - `@informative("1h", "BTC/USDT")` merges cross-pair columns
-     (`btc_usdt_rsi_1h`). Remember to set `startup_candle_count` high enough
-     for slow higher-TF indicators.
-2. **Dynamic Position Sizing (`custom_stake_amount`)**:
+   - `@informative("1h", "BTC/USDT:USDT")` merges cross-pair columns as
+     `btc_usdt_<col>_1h` (note: pass `"BTC/USDT:USDT"` in the decorator, while
+     FreqTrade drops `:USDT` in the merged column prefix!). Remember to set
+     `startup_candle_count` high enough for slow higher-TF indicators.
+2. **1× Long & Short (`can_short = True`)**:
+   - Emit `enter_long` / `exit_long` and/or `enter_short` / `exit_short` in
+     `populate_entry_trend` / `populate_exit_trend`.
+   - Always keep `def leverage(...) -> float: return 1.0`.
+   - Monitor the `sides:` line in `run.py` output (`long`, `short`, net
+     `funding` PnL in USDT) to verify both sides and funding drag/carry behave
+     as hypothesized.
+3. **Dynamic Position Sizing (`custom_stake_amount`)**:
    - Scale `proposed_stake` within `[min_stake, max_stake]` for volatility
      targeting, conviction weighting, or regime sizing.
    - Lesson from v0.4.1: multiplicative sizing composition works when signals
      are independent/positively correlated, and inverse-amplifies when
      negatively correlated!
-3. **Strategy-Declared Basket (`pair_basket`)**:
-   - Optional subset of the 5 pairs (e.g. `pair_basket = ["BNB/USDT"]` or
-     alts-only). You can also build per-pair-conditional paradigms inside one
-     strategy using `metadata["pair"]`.
+4. **Strategy-Declared Basket (`pair_basket`)**:
+   - Optional subset of the 5 futures pairs (must include `:USDT`, e.g.
+     `pair_basket = ["BNB/USDT:USDT"]` or alts-only). You can also build
+     per-pair-conditional paradigms inside one strategy using `metadata["pair"]`.
 
 ### Hard Lifecycle Rules
 
@@ -162,13 +200,13 @@ To set up a new experiment:
 
 ---
 
-## Reading `run.py` v0.5.1 Output
+## Reading `run.py` v0.5.2 Output
 
 Quick scan of strategy summaries + portfolio rollup:
 ```bash
 awk '/timerange_label: *(SUMMARY|PORTFOLIO_SUMMARY)/,/^$/' run.log
 ```
-Full blocks (including per-regime `bull_2021` / `winter_2022` / `recovery_23_25` / `full_5y`):
+Full blocks (including per-regime `bull_2021` / `winter_2022` / `recovery_23_25` / `full_5y` and `sides:` long/short/funding breakdown):
 ```bash
 awk '/^---$/,/^$/' run.log
 ```
@@ -233,7 +271,7 @@ gate status, and portfolio correlation/marginal impact.
    stays intact because it is gitignored!).
 9. **Repeat continuously** without stopping to ask the human!
 
-### Keep vs. Kill Criteria (v0.5.1)
+### Keep vs. Kill Criteria (v0.5.2)
 
 Keep / evolve a strategy when:
 1. It is **`[ACCRETIVE]`** to `portfolio_robust_sharpe` (or `marginal_full_sharpe`
