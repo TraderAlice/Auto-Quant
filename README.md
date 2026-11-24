@@ -34,23 +34,29 @@ them. Full write-up in
 
 Four things that matter:
 
-- **`config.json`** — FreqTrade config, fixed. Pairs, timeframe, fees, dry-run
-  wallet, timerange. The agent does not touch this.
-- **`prepare.py`** — one-time data download from Binance via FreqTrade's Python
-  API. Downloads 1h, 4h, and 1d OHLCV for both pairs (v0.3.0+ uses the extra
-  timeframes via the `@informative` decorator). The agent does not touch this.
-- **`run.py`** — in-process **portfolio & multi-regime oracle** (v0.5.1).
+- **`config.json`** — FreqTrade + bench config, fixed during runs (human-tunable
+  *before* starting a run). Configures Binance USDT-M perpetual futures
+  (`trading_mode: "futures"`, `margin_mode: "isolated"`, 5 pairs with `:USDT`
+  suffix), `1h` base timeframe, `fee` (per-side commission, default `0.001`),
+  and the `autoquant` bench block (`data_timerange`, `split_date`,
+  `max_leverage: 1.0`). The agent does not touch this.
+- **`prepare.py`** — config-driven data download from Binance via FreqTrade's
+  Python API. Downloads `1h`, `4h`, and `1d` futures OHLCV plus `1h` `mark` and
+  `funding_rate` across `autoquant.data_timerange` for all configured pairs
+  (supports `--timerange` and `--erase`). The agent does not touch this.
+- **`run.py`** — in-process **portfolio & multi-regime oracle** (v0.5.2).
   Discovers every `.py` under `user_data/strategies/` (skipping `_` files),
-  runs FreqTrade's `Backtesting` across the 4 canonical regimes (`bull_2021`,
-  `winter_2022`, `recovery_23_25`, `full_5y`), reconstructs true daily
-  **Mark-to-Market (MTM)** equity curves (realized PnL + fee-inclusive EOD
-  unrealized PnL of open positions at `1d` UTC closes, exposing floating
-  drawdowns, true `beta`, and real cross-strategy tail correlations alongside
-  `daily_sharpe`, `daily_sortino`, `calmar`, `ulcer_index`, `martin_ratio`,
-  OLS `alpha`/`beta`/`info_ratio` vs BaH, `time_in_market_pct`, and
-  `effective_pairs`), evaluates regime-calibrated + 3D kill-aware Pareto gates,
-  and emits a cross-strategy **`PORTFOLIO_SUMMARY`** block combining all active
-  slots (`portfolio_robust_sharpe`, `diversification_gain`, pairwise daily/tail
+  runs FreqTrade's `Backtesting` on the active split's regimes (default
+  `--split train` strictly before `split_date`, e.g. `bull_2021`, `winter_2022`,
+  `recovery_23_25`, `full_5y`; humans run `--oos` / `--split test` for post-run
+  out-of-sample evaluation `>= split_date`, with optional `--fee` / `--timerange`
+  overrides), enforces `autoquant.max_leverage` (`1.0x`), reconstructs true
+  daily **Mark-to-Market (MTM)** equity curves (realized PnL incl. funding +
+  fee-inclusive EOD unrealized PnL of all open long/short positions at `1d` UTC
+  closes), emits long/short + funding breakdowns (`sides:`), evaluates
+  regime-calibrated + 3D kill-aware Pareto gates, and emits a cross-strategy
+  **`PORTFOLIO_SUMMARY`** block combining all active slots
+  (`portfolio_robust_sharpe`, `diversification_gain`, pairwise daily/tail
   correlations, and leave-one-out `marginal_robust_sharpe` `[ACCRETIVE]` /
   `[DILUTIVE]`). The agent does not touch this.
 - **`user_data/strategies/`** — **the directory the agent owns**. Each `.py`
@@ -122,6 +128,15 @@ Plus:
   and reporting `mtm_dd` alongside `ft_realized_dd`. Eliminates the realized-only
   illusions around floating drawdown, near-zero `beta`, and artificial negative
   loss-day tail correlations on hold-and-pray strategies.
+- **v0.5.2** *(scaffold)*: unlocks **1× unleveraged long/short trading** on
+  Binance USDT-M perpetual futures (`trading_mode: "futures"`,
+  `margin_mode: "isolated"`, real historical funding rates, `max_leverage: 1.0`
+  enforced in `run.py`, plus `sides:` long/short/funding reporting) and adds a
+  **configurable bench & train/test split** in `config.json` (`fee`,
+  `autoquant.data_timerange`, `autoquant.split_date`, `autoquant.max_leverage`),
+  with `uv run run.py` defaulting to the training split (`< split_date`) and
+  `uv run run.py --oos` (plus optional `--fee` / `--timerange`) for clean
+  post-run out-of-sample evaluation.
 
 ## Requirements
 
@@ -169,6 +184,24 @@ prompt something like:
 
 The agent reads `program.md`, goes through setup, then enters the experiment
 loop. It keeps iterating until you interrupt it or it runs out of context.
+
+### Configuring bench parameters & running OOS evaluation (v0.5.2+)
+
+Before starting a run, you can customize `config.json` (fixed once the run begins):
+- `fee`: per-side trading commission (default `0.001` = `0.10%`/side; e.g. `0.0005` for Binance taker or `0.002` for conservative slippage)
+- `autoquant.data_timerange`: full dataset window fetched by `uv run prepare.py` (default `"20210101-20261124"`)
+- `autoquant.split_date`: train/test cutoff date (default `"20260101"`)
+- `autoquant.max_leverage`: leverage hard cap enforced by `run.py` (default `1.0`)
+
+After the agent finishes iterating on the training split (`uv run run.py`), evaluate the final lineup out-of-sample:
+
+```bash
+# Evaluate on OOS test split (>= split_date)
+uv run run.py --oos
+
+# Optional fee/slippage stress test on OOS
+uv run run.py --oos --fee 0.002
+```
 
 ### Permissions
 

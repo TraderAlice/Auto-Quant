@@ -1,52 +1,49 @@
 """
-run.py — READ-ONLY. The v0.5.1 Portfolio & Multi-Regime Oracle (Daily MTM). Do not modify.
+run.py — READ-ONLY during runs. The v0.5.2 Portfolio & Multi-Regime Oracle
+(Daily MTM + 1x Futures Long/Short + Configurable Train/Test Split).
+
+Bench settings (`autoquant.data_timerange`, `autoquant.split_date`,
+`autoquant.max_leverage`, `fee`, `trading_mode`, `exchange.pair_whitelist`) are
+loaded from `config.json` (human-configurable before a run; immutable during
+the run).
 
 For each strategy in `user_data/strategies/`, runs FreqTrade's Backtesting
-in-process across declared (or canonical 4-regime) timeranges and pair baskets,
+in-process across the active split's timeranges and pair baskets, enforces the
+configured `max_leverage` ceiling (default 1.0x — unleveraged long/short),
 reconstructs true daily Mark-to-Market (MTM) portfolio equity curves (realized
-PnL + end-of-day unrealized PnL of all open positions valued at 1d UTC closes,
-fee-inclusive), and emits:
+PnL incl. funding + end-of-day unrealized PnL of all open long/short positions
+valued at 1d UTC closes, fee-inclusive), and emits:
 
 1. Per-(strategy, timerange) blocks with:
-   - True daily MTM equity-curve metrics: `daily_sharpe` (apples-to-apples with BaH),
-     `daily_sortino`, `cagr_pct`, `calmar`, `ulcer_index`, `martin_ratio`,
-     `max_drawdown_pct` (capturing EOD floating drawdown, not just realized-on-close),
-     `max_dd_days` (longest underwater duration), plus legacy `ft_sharpe`
+   - True daily MTM equity-curve metrics: `daily_sharpe`, `daily_sortino`,
+     `cagr_pct`, `calmar`, `ulcer_index`, `martin_ratio`, `max_drawdown_pct`
+     (`mtm_dd` vs `ft_realized_dd`), `max_dd_days`, plus legacy `ft_sharpe`
    - Benchmark decomposition vs equal-weight Buy-and-Hold (`bah_*`):
-     `alpha_ann_pct` (Jensen's alpha), `beta`, `info_ratio`
-   - Capital utilization & internal diversification:
-     `avg_pos_pct`, `time_in_market_pct`, `capital_util_pct`, `effective_pairs`
-     (inverse HHI of per-pair PnL contribution)
-   - Per-pair breakdown alongside per-pair BaH
+     `alpha_ann_pct`, `beta`, `info_ratio`
+   - Long / short decomposition (`sides`: long/short trade counts, profit %,
+     net `funding_fees`, and `max_lev`)
+   - Capital utilization & breadth (`avg_pos_pct`, `time_in_market_pct`,
+     `capital_util_pct`, `effective_pairs`) + per-pair breakdown
 
-2. Per-strategy `SUMMARY` block across regimes:
-   - `robust_sharpe` (= min `daily_sharpe` across regimes) & `robust_sortino`
-   - Calibrated multi-objective gates:
-     * `regime_return_gate`: bull/recovery/full require positive profit floor;
-       bear/winter (BaH < 0) requires capital preservation (profit >= -2% and > BaH)
-     * `exposure_gate`: `worst_avg_pos_pct >= 5%` and `full_time_in_market_pct >= 2%`
-     * `pareto_dominated_by`: 3D Pareto check on `(robust_sharpe, full_cagr_pct, worst_dd_pct)`
-       against active/archived prior rows in `results.tsv`
+2. Per-strategy `SUMMARY` block across regimes (`robust_sharpe`,
+   `robust_sortino`, calibrated multi-objective gates, 3D kill-aware Pareto)
 
-3. Cross-strategy `PORTFOLIO_SUMMARY` block (when >= 1 strategy succeeds):
-   - Combines all active strategies into an equal-weight multi-strategy portfolio
-     across all common timeranges using their daily MTM return series
-   - Reports `portfolio_robust_sharpe`, `portfolio_robust_sortino`,
-     `portfolio_full_cagr_pct`, `portfolio_worst_dd_pct`, `portfolio_martin_ratio`,
-     `portfolio_alpha_ann_pct`, `portfolio_beta`, and `diversification_gain`
-   - Pairwise daily return correlation & drawdown-day tail correlation matrix
-     + `diversification_gate` (`max_pairwise_corr < 0.60`)
-   - Leave-one-out `marginal_robust_sharpe` & `marginal_full_sharpe` per strategy
-     (`ACCRETIVE` vs `DILUTIVE`)
+3. Cross-strategy `PORTFOLIO_SUMMARY` block (`PORTFOLIO_EQ` equal-weight
+   daily-MTM rollup, correlations, leave-one-out marginal contributions)
 
 Usage:
-    uv run run.py > run.log 2>&1
+    uv run run.py > run.log 2>&1              # Train split (default for agent)
+    uv run run.py --oos                       # Out-of-sample test split (>= split_date)
+    uv run run.py --split test --fee 0.002    # OOS with ad-hoc fee sensitivity check
+    uv run run.py --timerange 20260101-20261124
     awk '/^---$/,/^$/' run.log
 """
 
 from __future__ import annotations
 
+import argparse
 import importlib.util
+import json
 import math
 import subprocess
 import sys
@@ -62,7 +59,7 @@ from freqtrade.enums import RunMode
 from freqtrade.optimize.backtesting import Backtesting
 
 # ---------------------------------------------------------------------------
-# Fixed constants. Do not modify.
+# Paths & config-driven bench constants (edit config.json before starting a run).
 # ---------------------------------------------------------------------------
 PROJECT_DIR = Path(__file__).parent.resolve()
 USER_DATA = PROJECT_DIR / "user_data"
@@ -70,15 +67,92 @@ DATA_DIR = USER_DATA / "data"
 STRATEGIES_DIR = USER_DATA / "strategies"
 CONFIG = PROJECT_DIR / "config.json"
 
-DEFAULT_TIMERANGE = "20210101-20251231"
-CANONICAL_TIMERANGES: list[tuple[str, str]] = [
-    ("bull_2021", "20210101-20211231"),
-    ("winter_2022", "20220101-20221231"),
-    ("recovery_23_25", "20230101-20251231"),
-    ("full_5y", "20210101-20251231"),
-]
-PAIRS = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "AVAX/USDT"]
+
+def _load_bench_config() -> dict[str, Any]:
+    cfg = json.loads(CONFIG.read_text(encoding="utf-8"))
+    aq = cfg.get("autoquant") or {}
+    pairs = list(cfg.get("exchange", {}).get("pair_whitelist") or [])
+    return {
+        "pairs": pairs,
+        "trading_mode": str(cfg.get("trading_mode", "futures")),
+        "fee": float(cfg.get("fee", 0.001)),
+        "data_timerange": str(aq.get("data_timerange") or cfg.get("timerange") or "20210101-20261124"),
+        "split_date": str(aq.get("split_date") or "20260101"),
+        "max_leverage": float(aq.get("max_leverage", 1.0)),
+    }
+
+
+BENCH_CFG = _load_bench_config()
+PAIRS: list[str] = BENCH_CFG["pairs"]
 PAIRS_STR = ",".join(PAIRS)
+TRADING_MODE: str = BENCH_CFG["trading_mode"]
+BENCH_FEE: float = BENCH_CFG["fee"]
+DATA_TIMERANGE: str = BENCH_CFG["data_timerange"]
+SPLIT_DATE: str = BENCH_CFG["split_date"]
+MAX_LEVERAGE: float = BENCH_CFG["max_leverage"]
+
+# Historical regime templates intersected with the configured train window
+_REGIME_TEMPLATES: list[tuple[str, str, str]] = [
+    ("bull_2021", "20210101", "20211231"),
+    ("winter_2022", "20220101", "20221231"),
+    ("recovery_23_25", "20230101", "20251231"),
+    ("post_2025", "20260101", "20991231"),
+]
+
+
+def _fmt_ymd(ts: pd.Timestamp) -> str:
+    return ts.strftime("%Y%m%d")
+
+
+def build_split_timeranges(
+    split: str = "train",
+    data_timerange: str | None = None,
+    split_date: str | None = None,
+    custom_timerange: str | None = None,
+) -> list[tuple[str, str]]:
+    """Build evaluation (label, timerange) list from bench config and split."""
+    if custom_timerange:
+        return [("custom", custom_timerange)]
+
+    dtr = data_timerange or DATA_TIMERANGE
+    sdate = split_date or SPLIT_DATE
+    d_start_str, d_end_str = dtr.split("-", 1)
+    d_start = pd.Timestamp(d_start_str, tz="UTC").normalize()
+    d_end = pd.Timestamp(d_end_str, tz="UTC").normalize()
+    sp = pd.Timestamp(sdate, tz="UTC").normalize()
+
+    if split == "test":
+        if sp > d_end:
+            raise ValueError(
+                f"split_date ({sdate}) is after data_timerange end ({d_end_str}); "
+                "update autoquant.data_timerange / split_date in config.json."
+            )
+        return [("oos_test", f"{_fmt_ymd(max(d_start, sp))}-{_fmt_ymd(d_end)}")]
+
+    # Train split: [d_start, min(d_end, split_date - 1 day)]
+    train_end = min(d_end, sp - pd.Timedelta(days=1))
+    if train_end < d_start + pd.Timedelta(days=30):
+        raise ValueError(
+            f"Train window [{_fmt_ymd(d_start)}..{_fmt_ymd(train_end)}] is too short; "
+            "check autoquant.data_timerange and autoquant.split_date in config.json."
+        )
+
+    out: list[tuple[str, str]] = []
+    for lbl, r_s, r_e in _REGIME_TEMPLATES:
+        rs = max(d_start, pd.Timestamp(r_s, tz="UTC").normalize())
+        re = min(train_end, pd.Timestamp(r_e, tz="UTC").normalize())
+        if (re - rs).days >= 60:
+            out.append((lbl, f"{_fmt_ymd(rs)}-{_fmt_ymd(re)}"))
+
+    full_tr = f"{_fmt_ymd(d_start)}-{_fmt_ymd(train_end)}"
+    full_label = "full_5y" if full_tr == "20210101-20251231" else "full_train"
+    if not out or out[-1][1] != full_tr:
+        out.append((full_label, full_tr))
+    return out
+
+
+CANONICAL_TIMERANGES: list[tuple[str, str]] = build_split_timeranges("train")
+DEFAULT_TIMERANGE = CANONICAL_TIMERANGES[-1][1]
 
 # Multi-objective gates (v0.5.0 calibrated)
 BULL_PROFIT_FLOOR_PCT = 10.0       # bull/recovery (BaH >= 0) minimum profit %
@@ -121,20 +195,31 @@ def load_strategy_class(name: str):
     return cls
 
 
-def get_strategy_overrides(name: str) -> tuple[list[str] | None, list[tuple[str, str]]]:
+def get_strategy_overrides(
+    name: str,
+    default_timeranges: list[tuple[str, str]] | None = None,
+    force_timeranges: bool = False,
+) -> tuple[list[str] | None, list[tuple[str, str]]]:
     """Return (pair_basket, test_timeranges) declared by the strategy class.
 
-    Defaults in v0.5.0: full 5-pair whitelist + canonical 4-regime timeranges
-    so cross-strategy portfolio rollups align automatically.
+    Defaults to full configured whitelist + active split timeranges so
+    cross-strategy portfolio rollups align automatically. When running `--oos`
+    or `--timerange`, `force_timeranges=True` overrides any class attribute.
     """
     cls = load_strategy_class(name)
     pair_basket = getattr(cls, "pair_basket", None)
-    test_timeranges = getattr(cls, "test_timeranges", None) or list(CANONICAL_TIMERANGES)
+    base_trs = list(default_timeranges) if default_timeranges else list(CANONICAL_TIMERANGES)
+    test_timeranges = base_trs if force_timeranges else (getattr(cls, "test_timeranges", None) or base_trs)
     if pair_basket is not None:
         for p in pair_basket:
             if p not in PAIRS:
+                hint = (
+                    f" (futures mode requires ':USDT' suffix, e.g. '{p}:USDT')"
+                    if TRADING_MODE == "futures" and f"{p}:USDT" in PAIRS
+                    else ""
+                )
                 raise ValueError(
-                    f"{name}: pair_basket entry {p!r} not in whitelist {PAIRS}"
+                    f"{name}: pair_basket entry {p!r} not in whitelist {PAIRS}{hint}"
                 )
     for label, tr in test_timeranges:
         if "-" not in tr or len(tr) < 11:
@@ -164,6 +249,7 @@ def run_backtest(
     strategy_name: str,
     timerange: str,
     pair_basket: list[str] | None,
+    fee_override: float | None = None,
 ) -> dict[str, Any]:
     args = {
         "config": [str(CONFIG)],
@@ -177,6 +263,8 @@ def run_backtest(
         "cache": "none",
     }
     config = Configuration(args, RunMode.BACKTEST).get_config()
+    if fee_override is not None:
+        config["fee"] = fee_override
     exchange = _get_shared_exchange(config)
     if pair_basket:
         config["exchange"]["pair_whitelist"] = list(pair_basket)
@@ -315,11 +403,20 @@ def compute_benchmark_decomposition(
 _DAILY_CLOSE_CACHE: dict[str, pd.Series | None] = {}
 
 
+def _daily_close_path(pair: str) -> Path:
+    stem = pair.replace("/", "_").replace(":", "_")
+    if TRADING_MODE == "futures":
+        fut = DATA_DIR / "futures" / f"{stem}-1d-futures.feather"
+        if fut.exists():
+            return fut
+    return DATA_DIR / f"{stem}-1d.feather"
+
+
 def _load_daily_close(pair: str) -> pd.Series | None:
     """Load UTC end-of-day close series indexed by normalized UTC day."""
     if pair in _DAILY_CLOSE_CACHE:
         return _DAILY_CLOSE_CACHE[pair]
-    path = DATA_DIR / f"{pair.replace('/', '_')}-1d.feather"
+    path = _daily_close_path(pair)
     if not path.exists():
         _DAILY_CLOSE_CACHE[pair] = None
         return None
@@ -585,8 +682,32 @@ def extract_strategy_bundle(
     win_start_epoch = start.timestamp()
     win_end_epoch = win_end_inclusive.timestamp()
 
+    long_trades = 0
+    short_trades = 0
+    long_profit_abs = 0.0
+    short_profit_abs = 0.0
+    funding_fees_abs = 0.0
+    max_leverage_seen = 1.0
+
     for t in trades:
+        lev = _get(t, "leverage", default=1.0)
+        if lev > max_leverage_seen:
+            max_leverage_seen = lev
+        if lev > MAX_LEVERAGE + 1e-6:
+            raise ValueError(
+                f"{strategy_name}: trade leverage {lev:.2f}x exceeds bench "
+                f"max_leverage={MAX_LEVERAGE:.2f}x (locked to 1x in config.json)"
+            )
+
         p_abs = _get(t, "profit_abs", default=0.0)
+        funding_fees_abs += _get(t, "funding_fees", default=0.0)
+        if bool(t.get("is_short", False)):
+            short_trades += 1
+            short_profit_abs += p_abs
+        else:
+            long_trades += 1
+            long_profit_abs += p_abs
+
         stake = _get(t, "stake_amount", default=0.0)
         if stake > 0:
             stakes.append(stake)
@@ -692,6 +813,12 @@ def extract_strategy_bundle(
         "ft_drawdown_pct": ft_agg["max_drawdown_pct"],
         "max_dd_days": curve["max_dd_days"],
         "trade_count": ft_agg["trade_count"],
+        "long_trades": long_trades,
+        "short_trades": short_trades,
+        "long_profit_pct": (long_profit_abs / starting_balance) * 100.0,
+        "short_profit_pct": (short_profit_abs / starting_balance) * 100.0,
+        "funding_fees_abs": funding_fees_abs,
+        "max_leverage": max_leverage_seen,
         "win_rate_pct": ft_agg["win_rate_pct"],
         "profit_factor": ft_agg["profit_factor"],
         "alpha_ann_pct": decomp["alpha_ann_pct"],
@@ -1060,6 +1187,11 @@ def print_block(
     print(f"beta:               {agg['beta']:.4f}")
     print(f"info_ratio:         {agg['info_ratio']:.4f}")
     print(f"trade_count:        {agg['trade_count']}")
+    print(
+        f"sides:              long={agg['long_trades']} ({agg['long_profit_pct']:+.2f}%) "
+        f"short={agg['short_trades']} ({agg['short_profit_pct']:+.2f}%) "
+        f"funding={agg['funding_fees_abs']:+.2f} USDT (max_lev={agg['max_leverage']:.2f}x)"
+    )
     print(f"win_rate_pct:       {agg['win_rate_pct']:.2f}")
     print(f"profit_factor:      {agg['profit_factor']:.4f}")
     print(
@@ -1207,6 +1339,35 @@ def print_error(
 # Main
 # ---------------------------------------------------------------------------
 def main() -> int:
+    parser = argparse.ArgumentParser(description="Auto-Quant v0.5.2 Portfolio & Multi-Regime Oracle.")
+    parser.add_argument(
+        "--split",
+        choices=["train", "test"],
+        default="train",
+        help="Evaluation split relative to config.json autoquant.split_date (default: train).",
+    )
+    parser.add_argument(
+        "--oos",
+        action="store_true",
+        help="Shortcut for --split test (evaluate on out-of-sample window >= split_date).",
+    )
+    parser.add_argument(
+        "--timerange",
+        default=None,
+        help="Optional ad-hoc timerange YYYYMMDD-YYYYMMDD (overrides split windows).",
+    )
+    parser.add_argument(
+        "--fee",
+        type=float,
+        default=None,
+        help="Optional one-off fee per side override (e.g. 0.002 for slippage check).",
+    )
+    cli = parser.parse_args()
+    split = "test" if cli.oos else cli.split
+    eval_timeranges = build_split_timeranges(split=split, custom_timerange=cli.timerange)
+    force_trs = (split == "test") or (cli.timerange is not None)
+    eff_fee = cli.fee if cli.fee is not None else BENCH_FEE
+
     strategies = discover_strategies()
     if not strategies:
         print(
@@ -1219,8 +1380,13 @@ def main() -> int:
 
     commit = get_commit()
     print(f"Discovered {len(strategies)} strategies: {', '.join(strategies)}")
+    print(
+        f"Bench:       mode={TRADING_MODE} max_lev={MAX_LEVERAGE:.1f}x fee={eff_fee*100:.3f}%/side "
+        f"data={DATA_TIMERANGE} split_date={SPLIT_DATE}"
+    )
+    print(f"Split:       {split.upper()}{' (OOS)' if split == 'test' else ' (IS)'}")
     print(f"Whitelist:   {PAIRS_STR}")
-    print(f"Default TRs: {', '.join(lbl for lbl, _ in CANONICAL_TIMERANGES)}")
+    print(f"Eval TRs:    {', '.join(f'{lbl}({tr})' for lbl, tr in eval_timeranges)}")
     print()
 
     n_ok_total = 0
@@ -1229,7 +1395,11 @@ def main() -> int:
 
     for name in strategies:
         try:
-            pair_basket, test_timeranges = get_strategy_overrides(name)
+            pair_basket, test_timeranges = get_strategy_overrides(
+                name,
+                default_timeranges=eval_timeranges,
+                force_timeranges=force_trs,
+            )
         except Exception as err:
             print_error(name, commit, "SETUP", "n/a", err)
             n_err_total += 1
@@ -1241,7 +1411,7 @@ def main() -> int:
 
         for label, timerange in test_timeranges:
             try:
-                results = run_backtest(name, timerange, pair_basket)
+                results = run_backtest(name, timerange, pair_basket, fee_override=cli.fee)
                 bah = compute_bah_benchmark(timerange, active_pairs)
                 bundle = extract_strategy_bundle(results, name, timerange, active_pairs, bah)
                 bundle["timerange_label"] = label
