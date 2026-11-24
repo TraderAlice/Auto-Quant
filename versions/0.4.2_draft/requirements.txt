@@ -1,0 +1,6 @@
+ccxt
+numpy
+polars
+polars_ta
+torch
+tqdm
