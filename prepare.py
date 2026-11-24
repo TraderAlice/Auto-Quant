@@ -1,14 +1,13 @@
 """
 prepare.py — READ-ONLY during runs. Part of the evaluation contract.
 
-One-time (or when `autoquant.data_timerange` changes) setup: check env +
+One-time (or when `DATA_TIMERANGE` in `run.py` changes) setup: check env +
 download OHLCV (and funding_rate / mark for futures) data from Binance across
 all enabled timeframes (1h base + 4h + 1d informative) for the configured
-pair whitelist and `data_timerange` in `config.json`.
+pair whitelist in `config.json` and `DATA_TIMERANGE` in `run.py`.
 
 Usage:
     uv run prepare.py
-    uv run prepare.py --timerange 20210101-20261124
     uv run prepare.py --erase
 """
 
@@ -36,8 +35,10 @@ except ImportError:
 
 from freqtrade.commands.data_commands import start_download_data  # noqa: E402
 
+from run import DATA_TIMERANGE, SPLIT_DATE  # noqa: E402
+
 # ---------------------------------------------------------------------------
-# Config-driven arena settings (edit config.json before starting a run).
+# Arena paths & exchange wiring (bench dates live at the top of run.py).
 # ---------------------------------------------------------------------------
 PROJECT_DIR = Path(__file__).parent.resolve()
 USER_DATA = PROJECT_DIR / "user_data"
@@ -47,13 +48,12 @@ TIMEFRAMES = ["1h", "4h", "1d"]
 
 def load_bench_settings() -> dict:
     cfg = json.loads(CONFIG.read_text(encoding="utf-8"))
-    aq = cfg.get("autoquant") or {}
     return {
         "exchange": cfg.get("exchange", {}).get("name", "binance"),
         "pairs": list(cfg.get("exchange", {}).get("pair_whitelist") or []),
         "trading_mode": cfg.get("trading_mode", "futures"),
-        "data_timerange": str(aq.get("data_timerange") or cfg.get("timerange") or "20210101-20261124"),
-        "split_date": str(aq.get("split_date") or "20260101"),
+        "data_timerange": DATA_TIMERANGE,
+        "split_date": SPLIT_DATE,
     }
 
 
@@ -132,11 +132,6 @@ def download(settings: dict, timerange: str, erase: bool = False) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Download OHLCV (+ funding/mark) data for Auto-Quant.")
     parser.add_argument(
-        "--timerange",
-        default=None,
-        help="Override autoquant.data_timerange from config.json (YYYYMMDD-YYYYMMDD)",
-    )
-    parser.add_argument(
         "--erase",
         action="store_true",
         help="Erase existing feather files before downloading fresh data.",
@@ -144,7 +139,7 @@ def main() -> None:
     cli = parser.parse_args()
 
     settings = load_bench_settings()
-    timerange = cli.timerange or settings["data_timerange"]
+    timerange = settings["data_timerange"]
     data_dir = USER_DATA / "data"
 
     if not cli.erase and data_exists(settings, timerange):

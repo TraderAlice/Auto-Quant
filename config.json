@@ -1,10 +1,4 @@
 {
-  "autoquant": {
-    "data_timerange": "20210101-20261124",
-    "split_date": "20260101",
-    "max_leverage": 1.0
-  },
-
   "max_open_trades": 5,
   "stake_currency": "USDT",
   "stake_amount": "unlimited",
@@ -69,14 +63,10 @@
     {"method": "StaticPairList"}
   ],
 
-  "fee": 0.001,
-
   "dataformat_ohlcv": "feather",
   "dataformat_trades": "feather",
 
   "internals": {
     "process_throttle_secs": 5
-  },
-
-  "timerange": "20210101-20251231"
+  }
 }

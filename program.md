@@ -27,22 +27,22 @@ cutoff makes out-of-sample generalization directly measurable.
 **v0.5.2 upgrades the scaffold on top of v0.5.1's true daily MTM oracle:**
 1. **1× Unleveraged Futures Long/Short**:
    - `config.json` switches to Binance USDT-M perpetuals (`trading_mode: "futures"`,
-     `margin_mode: "isolated"`) with `autoquant.max_leverage = 1.0`.
+     `margin_mode: "isolated"`), while `run.py` locks `MAX_LEVERAGE = 1.0`.
    - Strategies may set `can_short = True`, emit `enter_short` / `exit_short`,
-     and MUST keep `leverage(...) -> 1.0`. `run.py` enforces the `max_leverage`
-     ceiling on every trade and rejects any strategy exceeding `1.0x`.
+     and MUST keep `leverage(...) -> 1.0`. `run.py` enforces `MAX_LEVERAGE`
+     on every trade and rejects any strategy exceeding `1.0x`.
    - Real historical 8h funding payments are automatically settled by FreqTrade
      and included in each trade's `profit_abs`; `run.py` prints a `sides:` line
      (`long=N (+X%) short=M (+Y%) funding=+Z USDT (max_lev=1.00x)`, where
      positive funding = net received and negative = net paid).
-2. **Configurable Bench Settings & Train/Test Split**:
-   - Humans configure `fee`, `autoquant.data_timerange`, `autoquant.split_date`,
-     and `autoquant.max_leverage` in `config.json` *before* starting a run
-     (immutable during the run).
-   - `uv run run.py` defaults to `--split train` (strictly `< split_date`).
-     Post-`split_date` data (`--oos` / `--split test`) is reserved strictly for
-     post-run human out-of-sample evaluation — **never run `--oos` or inspect
-     dates `>= split_date` during the research loop.**
+2. **Centralized Bench Constants & Train/Test Split**:
+   - Humans configure `BENCH_FEE`, `MAX_LEVERAGE`, `DATA_TIMERANGE`, and
+     `SPLIT_DATE` as top-level constants in `run.py` *before* starting a run
+     (single source of truth; immutable during the run).
+   - `uv run run.py` evaluates strictly on the training split (`< SPLIT_DATE`).
+     `uv run run.py --oos` evaluates on the out-of-sample test split
+     (`>= SPLIT_DATE`) and is reserved strictly for post-run human evaluation —
+     **never run `--oos` during the research loop.**
 
 ## Core Oracle Pillars (v0.5.0 → v0.5.2)
 
@@ -109,11 +109,12 @@ To set up a new experiment:
    if not already on an experiment branch.
 2. **Read the in-scope files**:
    - `README.md` — project history
-   - `config.json` — fixed bench & FreqTrade config (`5` futures pairs, `1h` base,
-     1× leverage lock, configurable `fee`, `autoquant.data_timerange`,
-     `autoquant.split_date`). Do not modify during a run.
+   - `config.json` — fixed FreqTrade exchange/market config (`5` futures pairs,
+     `1h` base, isolated margin, dry-run wallet). Do not modify.
    - `prepare.py` — data check/download. Do not modify.
-   - `run.py` — the v0.5.2 daily MTM 1× futures portfolio oracle. Do not modify.
+   - `run.py` — the v0.5.2 daily MTM 1× futures portfolio oracle (defines bench
+     constants `BENCH_FEE`, `MAX_LEVERAGE`, `DATA_TIMERANGE`, `SPLIT_DATE`).
+     Do not modify.
    - `user_data/strategies/_template.py.example` — strategy skeleton.
    - `versions/0.5.0/retrospective.md` — key findings from prior runs.
 3. **Verify data exists**: Check that the 25 futures feather files exist under
@@ -152,10 +153,10 @@ To set up a new experiment:
 
 ### What you CANNOT do
 - Modify `prepare.py`, `run.py`, `config.json`, or `_template.py.example`.
-- Run `uv run run.py --oos`, `--split test`, `--fee`, or `--timerange` covering
-  dates `>= split_date` — the test split is strictly reserved for post-run
-  human OOS evaluation. Always run plain `uv run run.py > run.log 2>&1`.
-- Use leverage above `autoquant.max_leverage` (`1.0x`) — `run.py` enforces this
+- Run `uv run run.py --oos` — the test split (`>= SPLIT_DATE`) is strictly
+  reserved for post-run human OOS evaluation. Always run plain
+  `uv run run.py > run.log 2>&1`.
+- Use leverage above `MAX_LEVERAGE` (`1.0x`) — `run.py` enforces this
   and rejects `> 1.0x` trades as an error.
 - Add new Python dependencies or call `freqtrade` CLI directly — always run
   `uv run run.py`.

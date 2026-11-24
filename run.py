@@ -2,14 +2,14 @@
 run.py — READ-ONLY during runs. The v0.5.2 Portfolio & Multi-Regime Oracle
 (Daily MTM + 1x Futures Long/Short + Configurable Train/Test Split).
 
-Bench settings (`autoquant.data_timerange`, `autoquant.split_date`,
-`autoquant.max_leverage`, `fee`, `trading_mode`, `exchange.pair_whitelist`) are
-loaded from `config.json` (human-configurable before a run; immutable during
-the run).
+Bench constants (`BENCH_FEE`, `MAX_LEVERAGE`, `DATA_TIMERANGE`, `SPLIT_DATE`)
+are defined at the top of this file (human-editable before starting a run;
+immutable during the run). `prepare.py` reads `DATA_TIMERANGE` / `SPLIT_DATE`
+from here as the single source of truth.
 
 For each strategy in `user_data/strategies/`, runs FreqTrade's Backtesting
 in-process across the active split's timeranges and pair baskets, enforces the
-configured `max_leverage` ceiling (default 1.0x — unleveraged long/short),
+configured `MAX_LEVERAGE` ceiling (default 1.0x — unleveraged long/short),
 reconstructs true daily Mark-to-Market (MTM) portfolio equity curves (realized
 PnL incl. funding + end-of-day unrealized PnL of all open long/short positions
 valued at 1d UTC closes, fee-inclusive), and emits:
@@ -32,10 +32,8 @@ valued at 1d UTC closes, fee-inclusive), and emits:
    daily-MTM rollup, correlations, leave-one-out marginal contributions)
 
 Usage:
-    uv run run.py > run.log 2>&1              # Train split (default for agent)
-    uv run run.py --oos                       # Out-of-sample test split (>= split_date)
-    uv run run.py --split test --fee 0.002    # OOS with ad-hoc fee sensitivity check
-    uv run run.py --timerange 20260101-20261124
+    uv run run.py > run.log 2>&1    # Train split (< SPLIT_DATE, default for agent)
+    uv run run.py --oos             # Out-of-sample test split (>= SPLIT_DATE, human only)
     awk '/^---$/,/^$/' run.log
 """
 
@@ -59,7 +57,16 @@ from freqtrade.enums import RunMode
 from freqtrade.optimize.backtesting import Backtesting
 
 # ---------------------------------------------------------------------------
-# Paths & config-driven bench constants (edit config.json before starting a run).
+# Bench constants — edit before starting a run; READ-ONLY during runs.
+# Single source of truth (prepare.py imports DATA_TIMERANGE / SPLIT_DATE).
+# ---------------------------------------------------------------------------
+BENCH_FEE: float = 0.001                   # per-side trading commission (0.001 = 0.10%/side)
+MAX_LEVERAGE: float = 1.0                  # hard leverage ceiling (1.0x = unleveraged long/short)
+DATA_TIMERANGE: str = "20210101-20261124"  # full downloaded dataset range
+SPLIT_DATE: str = "20260101"               # train (< SPLIT_DATE) vs OOS test (>= SPLIT_DATE)
+
+# ---------------------------------------------------------------------------
+# Paths & exchange wiring (loaded from config.json)
 # ---------------------------------------------------------------------------
 PROJECT_DIR = Path(__file__).parent.resolve()
 USER_DATA = PROJECT_DIR / "user_data"
@@ -68,28 +75,15 @@ STRATEGIES_DIR = USER_DATA / "strategies"
 CONFIG = PROJECT_DIR / "config.json"
 
 
-def _load_bench_config() -> dict[str, Any]:
+def _load_exchange_wiring() -> tuple[list[str], str]:
     cfg = json.loads(CONFIG.read_text(encoding="utf-8"))
-    aq = cfg.get("autoquant") or {}
     pairs = list(cfg.get("exchange", {}).get("pair_whitelist") or [])
-    return {
-        "pairs": pairs,
-        "trading_mode": str(cfg.get("trading_mode", "futures")),
-        "fee": float(cfg.get("fee", 0.001)),
-        "data_timerange": str(aq.get("data_timerange") or cfg.get("timerange") or "20210101-20261124"),
-        "split_date": str(aq.get("split_date") or "20260101"),
-        "max_leverage": float(aq.get("max_leverage", 1.0)),
-    }
+    trading_mode = str(cfg.get("trading_mode", "futures"))
+    return pairs, trading_mode
 
 
-BENCH_CFG = _load_bench_config()
-PAIRS: list[str] = BENCH_CFG["pairs"]
+PAIRS, TRADING_MODE = _load_exchange_wiring()
 PAIRS_STR = ",".join(PAIRS)
-TRADING_MODE: str = BENCH_CFG["trading_mode"]
-BENCH_FEE: float = BENCH_CFG["fee"]
-DATA_TIMERANGE: str = BENCH_CFG["data_timerange"]
-SPLIT_DATE: str = BENCH_CFG["split_date"]
-MAX_LEVERAGE: float = BENCH_CFG["max_leverage"]
 
 # Historical regime templates intersected with the configured train window
 _REGIME_TEMPLATES: list[tuple[str, str, str]] = [
@@ -108,12 +102,8 @@ def build_split_timeranges(
     split: str = "train",
     data_timerange: str | None = None,
     split_date: str | None = None,
-    custom_timerange: str | None = None,
 ) -> list[tuple[str, str]]:
-    """Build evaluation (label, timerange) list from bench config and split."""
-    if custom_timerange:
-        return [("custom", custom_timerange)]
-
+    """Build evaluation (label, timerange) list from bench constants and split."""
     dtr = data_timerange or DATA_TIMERANGE
     sdate = split_date or SPLIT_DATE
     d_start_str, d_end_str = dtr.split("-", 1)
@@ -124,8 +114,8 @@ def build_split_timeranges(
     if split == "test":
         if sp > d_end:
             raise ValueError(
-                f"split_date ({sdate}) is after data_timerange end ({d_end_str}); "
-                "update autoquant.data_timerange / split_date in config.json."
+                f"SPLIT_DATE ({sdate}) is after DATA_TIMERANGE end ({d_end_str}); "
+                "update DATA_TIMERANGE / SPLIT_DATE at the top of run.py."
             )
         return [("oos_test", f"{_fmt_ymd(max(d_start, sp))}-{_fmt_ymd(d_end)}")]
 
@@ -134,7 +124,7 @@ def build_split_timeranges(
     if train_end < d_start + pd.Timedelta(days=30):
         raise ValueError(
             f"Train window [{_fmt_ymd(d_start)}..{_fmt_ymd(train_end)}] is too short; "
-            "check autoquant.data_timerange and autoquant.split_date in config.json."
+            "check DATA_TIMERANGE and SPLIT_DATE at the top of run.py."
         )
 
     out: list[tuple[str, str]] = []
@@ -249,7 +239,6 @@ def run_backtest(
     strategy_name: str,
     timerange: str,
     pair_basket: list[str] | None,
-    fee_override: float | None = None,
 ) -> dict[str, Any]:
     args = {
         "config": [str(CONFIG)],
@@ -263,8 +252,7 @@ def run_backtest(
         "cache": "none",
     }
     config = Configuration(args, RunMode.BACKTEST).get_config()
-    if fee_override is not None:
-        config["fee"] = fee_override
+    config["fee"] = BENCH_FEE
     exchange = _get_shared_exchange(config)
     if pair_basket:
         config["exchange"]["pair_whitelist"] = list(pair_basket)
@@ -696,7 +684,7 @@ def extract_strategy_bundle(
         if lev > MAX_LEVERAGE + 1e-6:
             raise ValueError(
                 f"{strategy_name}: trade leverage {lev:.2f}x exceeds bench "
-                f"max_leverage={MAX_LEVERAGE:.2f}x (locked to 1x in config.json)"
+                f"MAX_LEVERAGE={MAX_LEVERAGE:.2f}x (locked in run.py)"
             )
 
         p_abs = _get(t, "profit_abs", default=0.0)
@@ -1341,32 +1329,14 @@ def print_error(
 def main() -> int:
     parser = argparse.ArgumentParser(description="Auto-Quant v0.5.2 Portfolio & Multi-Regime Oracle.")
     parser.add_argument(
-        "--split",
-        choices=["train", "test"],
-        default="train",
-        help="Evaluation split relative to config.json autoquant.split_date (default: train).",
-    )
-    parser.add_argument(
         "--oos",
         action="store_true",
-        help="Shortcut for --split test (evaluate on out-of-sample window >= split_date).",
-    )
-    parser.add_argument(
-        "--timerange",
-        default=None,
-        help="Optional ad-hoc timerange YYYYMMDD-YYYYMMDD (overrides split windows).",
-    )
-    parser.add_argument(
-        "--fee",
-        type=float,
-        default=None,
-        help="Optional one-off fee per side override (e.g. 0.002 for slippage check).",
+        help="Evaluate on the out-of-sample test split (>= SPLIT_DATE). Default: train split.",
     )
     cli = parser.parse_args()
-    split = "test" if cli.oos else cli.split
-    eval_timeranges = build_split_timeranges(split=split, custom_timerange=cli.timerange)
-    force_trs = (split == "test") or (cli.timerange is not None)
-    eff_fee = cli.fee if cli.fee is not None else BENCH_FEE
+    split = "test" if cli.oos else "train"
+    eval_timeranges = build_split_timeranges(split=split)
+    force_trs = split == "test"
 
     strategies = discover_strategies()
     if not strategies:
@@ -1381,7 +1351,7 @@ def main() -> int:
     commit = get_commit()
     print(f"Discovered {len(strategies)} strategies: {', '.join(strategies)}")
     print(
-        f"Bench:       mode={TRADING_MODE} max_lev={MAX_LEVERAGE:.1f}x fee={eff_fee*100:.3f}%/side "
+        f"Bench:       mode={TRADING_MODE} max_lev={MAX_LEVERAGE:.1f}x fee={BENCH_FEE*100:.3f}%/side "
         f"data={DATA_TIMERANGE} split_date={SPLIT_DATE}"
     )
     print(f"Split:       {split.upper()}{' (OOS)' if split == 'test' else ' (IS)'}")
@@ -1411,7 +1381,7 @@ def main() -> int:
 
         for label, timerange in test_timeranges:
             try:
-                results = run_backtest(name, timerange, pair_basket, fee_override=cli.fee)
+                results = run_backtest(name, timerange, pair_basket)
                 bah = compute_bah_benchmark(timerange, active_pairs)
                 bundle = extract_strategy_bundle(results, name, timerange, active_pairs, bah)
                 bundle["timerange_label"] = label

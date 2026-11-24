@@ -34,31 +34,29 @@ them. Full write-up in
 
 Four things that matter:
 
-- **`config.json`** — FreqTrade + bench config, fixed during runs (human-tunable
-  *before* starting a run). Configures Binance USDT-M perpetual futures
-  (`trading_mode: "futures"`, `margin_mode: "isolated"`, 5 pairs with `:USDT`
-  suffix), `1h` base timeframe, `fee` (per-side commission, default `0.001`),
-  and the `autoquant` bench block (`data_timerange`, `split_date`,
-  `max_leverage: 1.0`). The agent does not touch this.
-- **`prepare.py`** — config-driven data download from Binance via FreqTrade's
-  Python API. Downloads `1h`, `4h`, and `1d` futures OHLCV plus `1h` `mark` and
-  `funding_rate` across `autoquant.data_timerange` for all configured pairs
-  (supports `--timerange` and `--erase`). The agent does not touch this.
-- **`run.py`** — in-process **portfolio & multi-regime oracle** (v0.5.2).
+- **`config.json`** — minimal FreqTrade exchange/market config, fixed during
+  runs. Configures Binance USDT-M perpetual futures (`trading_mode: "futures"`,
+  `margin_mode: "isolated"`, 5 pairs with `:USDT` suffix), `1h` base timeframe,
+  and dry-run wallet. The agent does not touch this.
+- **`prepare.py`** — one-time data download from Binance via FreqTrade's Python
+  API. Reads `DATA_TIMERANGE` from `run.py` and downloads `1h`, `4h`, and `1d`
+  futures OHLCV plus `1h` `mark` and `funding_rate` for all configured pairs
+  (supports `--erase`). The agent does not touch this.
+- **`run.py`** — in-process **portfolio & multi-regime oracle** (v0.5.2) and
+  single source of truth for bench constants (`BENCH_FEE`, `MAX_LEVERAGE`,
+  `DATA_TIMERANGE`, `SPLIT_DATE`, editable at the top of `run.py` before a run).
   Discovers every `.py` under `user_data/strategies/` (skipping `_` files),
-  runs FreqTrade's `Backtesting` on the active split's regimes (default
-  `--split train` strictly before `split_date`, e.g. `bull_2021`, `winter_2022`,
-  `recovery_23_25`, `full_5y`; humans run `--oos` / `--split test` for post-run
-  out-of-sample evaluation `>= split_date`, with optional `--fee` / `--timerange`
-  overrides), enforces `autoquant.max_leverage` (`1.0x`), reconstructs true
-  daily **Mark-to-Market (MTM)** equity curves (realized PnL incl. funding +
-  fee-inclusive EOD unrealized PnL of all open long/short positions at `1d` UTC
-  closes), emits long/short + funding breakdowns (`sides:`), evaluates
-  regime-calibrated + 3D kill-aware Pareto gates, and emits a cross-strategy
-  **`PORTFOLIO_SUMMARY`** block combining all active slots
-  (`portfolio_robust_sharpe`, `diversification_gain`, pairwise daily/tail
-  correlations, and leave-one-out `marginal_robust_sharpe` `[ACCRETIVE]` /
-  `[DILUTIVE]`). The agent does not touch this.
+  runs FreqTrade's `Backtesting` on the training split (`uv run run.py`,
+  `< SPLIT_DATE`: `bull_2021`, `winter_2022`, `recovery_23_25`, `full_5y`) or
+  post-run OOS test split (`uv run run.py --oos`, `>= SPLIT_DATE`), enforces
+  `MAX_LEVERAGE` (`1.0x`), reconstructs true daily **Mark-to-Market (MTM)**
+  equity curves (realized PnL incl. funding + fee-inclusive EOD unrealized PnL
+  of all open long/short positions at `1d` UTC closes), emits long/short +
+  funding breakdowns (`sides:`), evaluates regime-calibrated + 3D kill-aware
+  Pareto gates, and emits a cross-strategy **`PORTFOLIO_SUMMARY`** block
+  combining all active slots (`portfolio_robust_sharpe`, `diversification_gain`,
+  pairwise daily/tail correlations, and leave-one-out `marginal_robust_sharpe`
+  `[ACCRETIVE]` / `[DILUTIVE]`). The agent does not touch this.
 - **`user_data/strategies/`** — **the directory the agent owns**. Each `.py`
   is one strategy; up to 3 active at a time. Agent creates / evolves / forks
   / kills strategies here. Strategies evaluate on 1h base across the 5-pair
@@ -130,13 +128,12 @@ Plus:
   loss-day tail correlations on hold-and-pray strategies.
 - **v0.5.2** *(scaffold)*: unlocks **1× unleveraged long/short trading** on
   Binance USDT-M perpetual futures (`trading_mode: "futures"`,
-  `margin_mode: "isolated"`, real historical funding rates, `max_leverage: 1.0`
-  enforced in `run.py`, plus `sides:` long/short/funding reporting) and adds a
-  **configurable bench & train/test split** in `config.json` (`fee`,
-  `autoquant.data_timerange`, `autoquant.split_date`, `autoquant.max_leverage`),
-  with `uv run run.py` defaulting to the training split (`< split_date`) and
-  `uv run run.py --oos` (plus optional `--fee` / `--timerange`) for clean
-  post-run out-of-sample evaluation.
+  `margin_mode: "isolated"`, real historical funding rates, `MAX_LEVERAGE = 1.0`
+  enforced in `run.py`, plus `sides:` long/short/funding reporting) and
+  centralizes bench constants (`BENCH_FEE`, `MAX_LEVERAGE`, `DATA_TIMERANGE`,
+  `SPLIT_DATE`) at the top of `run.py`, with a minimal CLI: `uv run run.py`
+  for the training split (`< SPLIT_DATE`) and `uv run run.py --oos` for clean
+  post-run out-of-sample evaluation (`>= SPLIT_DATE`).
 
 ## Requirements
 
@@ -187,20 +184,18 @@ loop. It keeps iterating until you interrupt it or it runs out of context.
 
 ### Configuring bench parameters & running OOS evaluation (v0.5.2+)
 
-Before starting a run, you can customize `config.json` (fixed once the run begins):
-- `fee`: per-side trading commission (default `0.001` = `0.10%`/side; e.g. `0.0005` for Binance taker or `0.002` for conservative slippage)
-- `autoquant.data_timerange`: full dataset window fetched by `uv run prepare.py` (default `"20210101-20261124"`)
-- `autoquant.split_date`: train/test cutoff date (default `"20260101"`)
-- `autoquant.max_leverage`: leverage hard cap enforced by `run.py` (default `1.0`)
+Before starting a run, customize the 4 bench constants at the top of `run.py`
+(immutable once the run begins; `prepare.py` imports `DATA_TIMERANGE` /
+`SPLIT_DATE` from `run.py` directly):
+- `BENCH_FEE`: per-side trading commission (default `0.001` = `0.10%`/side; e.g. `0.0005` for Binance taker or `0.002` for conservative slippage)
+- `MAX_LEVERAGE`: leverage hard cap enforced by `run.py` (default `1.0`)
+- `DATA_TIMERANGE`: full dataset window fetched by `uv run prepare.py` (default `"20210101-20261124"`)
+- `SPLIT_DATE`: train/test cutoff date (default `"20260101"`)
 
 After the agent finishes iterating on the training split (`uv run run.py`), evaluate the final lineup out-of-sample:
 
 ```bash
-# Evaluate on OOS test split (>= split_date)
 uv run run.py --oos
-
-# Optional fee/slippage stress test on OOS
-uv run run.py --oos --fee 0.002
 ```
 
 ### Permissions
