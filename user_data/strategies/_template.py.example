@@ -25,10 +25,14 @@ MULTI-TIMEFRAME + CROSS-ASSET + DYNAMIC SIZING + BASKET + TIMERANGES
                           (v0.3.0 → v0.4.1)
 ========================================================================
 
-Data is pre-downloaded for three timeframes: 1h (base), 4h, and 1d.
-Five pairs are in the whitelist: BTC/USDT, ETH/USDT, SOL/USDT, BNB/USDT,
-AVAX/USDT. Each strategy is evaluated on ALL five pairs per backtest run;
-run.py reports aggregate + per-pair metrics.
+Data is pre-downloaded for three timeframes: 1h (base), 4h, and 1d on
+Binance USDT-M perpetual futures (1x leverage locked, isolated margin,
+historical funding rates included).
+Five pairs are in the whitelist:
+  BTC/USDT:USDT, ETH/USDT:USDT, SOL/USDT:USDT, BNB/USDT:USDT, AVAX/USDT:USDT
+Each strategy is evaluated on ALL five pairs (or its declared `pair_basket`)
+per backtest run; run.py reports aggregate, long/short sides, and per-pair
+metrics.
 
 Two affordances are available to enrich strategy signals:
 
@@ -39,23 +43,24 @@ Two affordances are available to enrich strategy signals:
        return dataframe
    # Later in populate_indicators: access as dataframe['rsi_4h']
 
-2) CROSS-PAIR (same TF, different pair):
-   @informative('1h', 'BTC/USDT')
+2) CROSS-PAIR (same TF, different pair — note the `:USDT` futures suffix!):
+   @informative('1h', 'BTC/USDT:USDT')
    def populate_indicators_btc(self, dataframe, metadata):
        dataframe['close_ma'] = ta.SMA(dataframe, 50)
        return dataframe
-   # Columns come out with the base_quote prefix: dataframe['btc_usdt_close_ma_1h']
+   # Access in populate_indicators as dataframe['btc_usdt_close_ma_1h']
+   # (FreqTrade drops the `:USDT` settle suffix when forming column prefixes!)
 
 3) BOTH (different pair AND different TF):
-   @informative('1d', 'BTC/USDT')
+   @informative('1d', 'BTC/USDT:USDT')
    def ...: ...  # -> dataframe['btc_usdt_...._1d']
 
 FreqTrade handles the heavy lifting: merges columns into the main dataframe
-with a _{timeframe} suffix (and _{base}_{quote} prefix for cross-pair),
+with a _{timeframe} suffix (and {base}_{quote}_ prefix for cross-pair),
 shifts by 1 period to prevent look-ahead bias, and forward-fills.
 
 **Important asymmetry**: if you reference a specific pair (e.g.
-@informative('1h', 'ETH/USDT')), that pair's data is pulled for EVERY
+@informative('1h', 'ETH/USDT:USDT')), that pair's data is pulled for EVERY
 backtested pair — including ETH itself, where it becomes redundant with
 the main TF's close. For truly symmetric cross-pair strategies (e.g.
 BTC/ETH price ratio that should be meaningful on BOTH pairs), use
@@ -117,7 +122,7 @@ class _Template(IStrategy):
 
     # ---- attributes every strategy must declare ----
     timeframe = "1h"
-    can_short = False
+    can_short = True  # v0.5.2: 1x unleveraged long/short enabled (futures mode)
 
     # The safest neutral baseline: no ROI take-profit cap, no stop-loss.
     # Override if the strategy needs them. Be aware that `exit_profit_only = True`
@@ -140,10 +145,24 @@ class _Template(IStrategy):
     # ---- OPTIONAL: portfolio basket — restrict the trade universe ----
     # If unset, the strategy is evaluated on ALL 5 pairs in the whitelist.
     # Declare a subset to opt into asset-specific paradigm fit.
-    # Examples:
-    #   pair_basket = ["BTC/USDT", "ETH/USDT"]              # majors only
-    #   pair_basket = ["SOL/USDT", "BNB/USDT", "AVAX/USDT"]  # alts only
-    #   pair_basket = ["BNB/USDT"]                          # single asset
+    # Examples (note `:USDT` suffix for futures):
+    #   pair_basket = ["BTC/USDT:USDT", "ETH/USDT:USDT"]
+    #   pair_basket = ["SOL/USDT:USDT", "BNB/USDT:USDT", "AVAX/USDT:USDT"]
+    #   pair_basket = ["BNB/USDT:USDT"]
+
+    # ---- 1x leverage lock (required in v0.5.2; run.py enforces max_leverage=1.0) ----
+    def leverage(
+        self,
+        pair: str,
+        current_time,
+        current_rate: float,
+        proposed_leverage: float,
+        max_leverage: float,
+        entry_tag: str | None,
+        side: str,
+        **kwargs,
+    ) -> float:
+        return 1.0
 
     # ---- OPTIONAL: multi-timerange testing ----
     # In v0.5.0, leaving `test_timeranges` unset automatically runs the 4
@@ -221,15 +240,19 @@ class _Template(IStrategy):
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Example single-TF: dataframe.loc[dataframe["rsi"] < 20, "enter_long"] = 1
-        # Example MTF confluence:
+        # Long example:
         # dataframe.loc[
-        #     (dataframe["rsi"] < 20) &                       # 1h oversold
-        #     (dataframe["close"] > dataframe["ema200_1d"]),  # 1d bull regime
+        #     (dataframe["rsi"] < 25) & (dataframe["close"] > dataframe["ema200_1d"]),
         #     "enter_long",
+        # ] = 1
+        # Short example (v0.5.2, 1x unleveraged):
+        # dataframe.loc[
+        #     (dataframe["rsi"] > 75) & (dataframe["close"] < dataframe["ema200_1d"]),
+        #     "enter_short",
         # ] = 1
         return dataframe
 
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # Example: dataframe.loc[dataframe["rsi"] > 75, "exit_long"] = 1
+        # dataframe.loc[dataframe["rsi"] > 60, "exit_long"] = 1
+        # dataframe.loc[dataframe["rsi"] < 40, "exit_short"] = 1
         return dataframe
